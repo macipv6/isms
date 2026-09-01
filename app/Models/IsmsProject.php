@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ProjectStatus;
+use Carbon\CarbonImmutable;
 use Database\Factories\IsmsProjectFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,6 +12,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * @property ProjectStatus $status
+ * @property CarbonImmutable|null $started_at
+ * @property CarbonImmutable|null $target_date
+ * @property CarbonImmutable|null $completed_at
  */
 class IsmsProject extends Model
 {
