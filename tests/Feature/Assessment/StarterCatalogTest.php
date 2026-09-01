@@ -27,7 +27,7 @@ class StarterCatalogTest extends TestCase
         $framework = Framework::query()->sole();
         $catalog = CatalogVersion::publishedForFramework('BSI');
         $questionKeys = $catalog->questions()->pluck('question_key');
-        $answerTypes = $catalog->questions()->pluck('answer_type')->all();
+        $answerTypes = $catalog->questions()->get()->pluck('answer_type')->all();
 
         $this->assertSame('BSI', $framework->key);
         $this->assertTrue($framework->is_active);
