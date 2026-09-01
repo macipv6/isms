@@ -5,7 +5,10 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Organizations\StoreOrganizationRequest;
 use App\Http\Requests\Organizations\UpdateOrganizationRequest;
 use App\Models\Organization;
+use App\Models\User;
+use App\Services\Audit\AuditLogger;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -45,7 +48,7 @@ class OrganizationController extends Controller
         ]);
     }
 
-    public function store(StoreOrganizationRequest $request): RedirectResponse
+    public function store(StoreOrganizationRequest $request, AuditLogger $audit): RedirectResponse
     {
         Gate::authorize('create', Organization::class);
 
@@ -58,25 +61,54 @@ class OrganizationController extends Controller
             'is_active' => true,
         ]);
 
+        $audit->record(
+            'organization.created',
+            $this->actor($request),
+            ['changed_fields' => array_keys($data)],
+            $organization->id,
+        );
+
         return redirect('/organizations/'.$organization->id);
     }
 
-    public function update(UpdateOrganizationRequest $request, Organization $organization): RedirectResponse
-    {
+    public function update(
+        UpdateOrganizationRequest $request,
+        Organization $organization,
+        AuditLogger $audit,
+    ): RedirectResponse {
         $this->ensureCustomer($organization);
         Gate::authorize('update', $organization);
 
-        $organization->update($request->validated());
+        $organization->fill($request->validated());
+        $changedFields = array_keys($organization->getDirty());
+        $organization->save();
+
+        $audit->record(
+            'organization.updated',
+            $this->actor($request),
+            ['changed_fields' => $changedFields],
+            $organization->id,
+        );
 
         return redirect('/organizations/'.$organization->id);
     }
 
-    public function deactivate(Organization $organization): RedirectResponse
-    {
+    public function deactivate(
+        Request $request,
+        Organization $organization,
+        AuditLogger $audit,
+    ): RedirectResponse {
         $this->ensureCustomer($organization);
         Gate::authorize('deactivate', $organization);
 
         $organization->forceFill(['is_active' => false])->save();
+
+        $audit->record(
+            'organization.deactivated',
+            $this->actor($request),
+            ['changed_fields' => ['is_active']],
+            $organization->id,
+        );
 
         return redirect('/organizations/'.$organization->id);
     }
@@ -84,6 +116,14 @@ class OrganizationController extends Controller
     private function ensureCustomer(Organization $organization): void
     {
         abort_unless($organization->organization_type === 'customer', 404);
+    }
+
+    private function actor(Request $request): User
+    {
+        $user = $request->user();
+        abort_unless($user instanceof User, 401);
+
+        return $user;
     }
 
     private function uniqueSlug(string $name): string
