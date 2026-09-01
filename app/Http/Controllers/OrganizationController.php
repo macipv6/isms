@@ -172,7 +172,8 @@ class OrganizationController extends Controller
         IsmsProject $project,
         Organization $organization,
         AssessmentProgress $assessmentProgress,
-    ): array {
+    ): array
+    {
         $project->setRelation('organization', $organization);
         $assessment = $project->assessment;
         $progress = $assessment instanceof ProjectAssessment
