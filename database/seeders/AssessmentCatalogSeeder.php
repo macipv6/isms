@@ -27,14 +27,24 @@ class AssessmentCatalogSeeder extends Seeder
                 'is_active' => true,
             ],
         );
+        $publishedCatalogExists = CatalogVersion::query()
+            ->where('framework_id', $framework->id)
+            ->where('version', '2026.1')
+            ->where('status', CatalogStatus::Published->value)
+            ->exists();
+
+        if ($publishedCatalogExists) {
+            return;
+        }
+
         $catalog = CatalogVersion::query()->updateOrCreate(
             [
                 'framework_id' => $framework->id,
                 'version' => '2026.1',
             ],
             [
-                'status' => CatalogStatus::Published,
-                'published_at' => CarbonImmutable::parse('2026-09-01T00:00:00+00:00'),
+                'status' => CatalogStatus::Draft,
+                'published_at' => null,
             ],
         );
 
@@ -99,6 +109,11 @@ class AssessmentCatalogSeeder extends Seeder
                 ],
             );
         }
+
+        $catalog->update([
+            'status' => CatalogStatus::Published,
+            'published_at' => CarbonImmutable::parse('2026-09-01T00:00:00+00:00'),
+        ]);
     }
 
     /**
