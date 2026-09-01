@@ -3,14 +3,21 @@
 namespace App\Models;
 
 use App\Enums\UserRole;
+use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 
+/**
+ * @property UserRole $role
+ */
 class User extends Authenticatable
 {
-    use HasFactory, HasUuids;
+    /** @use HasFactory<UserFactory> */
+    use HasFactory;
+
+    use HasUuids;
 
     protected $fillable = [
         'organization_id',
@@ -32,6 +39,9 @@ class User extends Authenticatable
         ];
     }
 
+    /**
+     * @return BelongsTo<Organization, $this>
+     */
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);

@@ -7,6 +7,9 @@ use Throwable;
 
 class EntraAuthenticationException extends RuntimeException
 {
+    /**
+     * @param  array<string, string|null>  $context
+     */
     public function __construct(
         public readonly string $reason,
         string $message,

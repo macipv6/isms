@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Database\Factories\OrganizationFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,10 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Organization extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes;
+    /** @use HasFactory<OrganizationFactory> */
+    use HasFactory;
+
+    use HasUuids, SoftDeletes;
 
     protected $fillable = [
         'name',
@@ -29,6 +33,9 @@ class Organization extends Model
         ];
     }
 
+    /**
+     * @return HasMany<User, $this>
+     */
     public function users(): HasMany
     {
         return $this->hasMany(User::class);

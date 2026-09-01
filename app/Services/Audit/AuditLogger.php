@@ -13,6 +13,9 @@ class AuditLogger
         'entra_tenant_id',
     ];
 
+    /**
+     * @param  array<string, string|null>  $context
+     */
     public function record(string $eventType, ?User $actor, array $context = []): AuditEvent
     {
         $request = app()->bound('request') ? app(Request::class) : null;
