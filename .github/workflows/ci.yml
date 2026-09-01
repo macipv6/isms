@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: isms_test
+          POSTGRES_USER: isms
+          POSTGRES_PASSWORD: isms-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U isms -d isms_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      APP_ENV: testing
+      APP_DEBUG: false
+      APP_URL: http://localhost
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: isms_test
+      DB_USERNAME: isms
+      DB_PASSWORD: isms-ci-only
+      SESSION_DRIVER: database
+      SESSION_ENCRYPT: true
+      MICROSOFT_TENANT_ID: 11111111-1111-4111-8111-111111111111
+      MICROSOFT_CLIENT_ID: 33333333-3333-4333-8333-333333333333
+      MICROSOFT_CLIENT_SECRET: ci-not-used
+      MICROSOFT_REDIRECT_URI: http://localhost/auth/microsoft/callback
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package.json
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Install frontend dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Prepare Laravel
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          php artisan migrate --force
+
+      - name: Backend checks
+        run: composer test
+
+      - name: Frontend lint
+        run: npm run lint:check
+
+      - name: Frontend format check
+        run: npm run format:check
+
+      - name: Frontend type check
+        run: npm run types:check
+
+      - name: Frontend production build
+        run: npm run build
