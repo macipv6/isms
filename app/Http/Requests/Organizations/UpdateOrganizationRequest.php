@@ -2,6 +2,4 @@
 
 namespace App\Http\Requests\Organizations;
 
-class UpdateOrganizationRequest extends StoreOrganizationRequest
-{
-}
+class UpdateOrganizationRequest extends StoreOrganizationRequest {}
