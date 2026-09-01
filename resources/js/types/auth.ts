@@ -6,6 +6,7 @@ export interface AuthUser {
 }
 
 export interface AuthProps {
+    [key: string]: unknown;
     auth: {
         user: AuthUser | null;
     };

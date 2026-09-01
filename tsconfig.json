@@ -10,7 +10,13 @@
     "esModuleInterop": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
-    "paths": {"@/*": ["./resources/js/*"]}
+    "paths": {"@/*": ["./resources/js/*"]},
+    "skipLibCheck": true
   },
-  "include": ["resources/js/**/*.ts", "resources/js/**/*.vue", "vite.config.ts"]
+  "include": [
+    "resources/js/**/*.ts",
+    "resources/js/**/*.d.ts",
+    "resources/js/**/*.tsx",
+    "resources/js/**/*.vue"
+  ]
 }

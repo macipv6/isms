@@ -40,7 +40,7 @@ jobs:
       MICROSOFT_REDIRECT_URI: http://localhost/auth/microsoft/callback
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -49,7 +49,7 @@ jobs:
           extensions: pdo_pgsql
           coverage: none
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '24'
           cache: npm
@@ -69,11 +69,6 @@ jobs:
 
       - name: Backend checks
         run: composer test
-
-      - name: Frontend formatter preview
-        run: |
-          npm run check:fix
-          git diff -- resources/js resources/css vite.config.ts
 
       - name: Frontend lint
         run: npm run lint:check

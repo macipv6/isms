@@ -14,12 +14,24 @@ function logout(): void {
 <template>
     <div class="min-h-screen bg-slate-950 text-slate-100">
         <header class="border-b border-slate-800 bg-slate-900/80">
-            <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+            <div
+                class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4"
+            >
                 <div>
-                    <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">ISMS Builder</p>
-                    <p v-if="user" class="mt-1 text-sm text-slate-300">{{ user.name }} · {{ user.role }}</p>
+                    <p
+                        class="text-xs font-semibold tracking-[0.22em] text-slate-400 uppercase"
+                    >
+                        ISMS Builder
+                    </p>
+                    <p v-if="user" class="mt-1 text-sm text-slate-300">
+                        {{ user.name }} · {{ user.role }}
+                    </p>
                 </div>
-                <button type="button" class="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-800" @click="logout">
+                <button
+                    type="button"
+                    class="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium hover:bg-slate-800"
+                    @click="logout"
+                >
                     Abmelden
                 </button>
             </div>
