@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, usePage } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { AuthProps } from '@/types/auth';
@@ -22,13 +22,18 @@ const user = computed(() => page.props.auth.user);
                 Angemeldet als: {{ user.name }} ({{ user.email }})
             </p>
             <div
-                class="mt-8 rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-8"
+                class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/50 p-8"
             >
-                <p class="font-medium">Noch keine Kundenprojekte vorhanden.</p>
+                <p class="text-lg font-medium">Kunden und ISMS-Projekte</p>
                 <p class="mt-2 text-sm text-slate-400">
-                    Die Kunden- und Projektverwaltung folgt im nächsten
-                    Delivery-Slice.
+                    Kundenprofile, Scope und Projektstatus zentral verwalten.
                 </p>
+                <Link
+                    href="/organizations"
+                    class="mt-5 inline-flex rounded-lg bg-cyan-500 px-5 py-2.5 font-semibold text-slate-950 hover:bg-cyan-400"
+                >
+                    Kunden öffnen
+                </Link>
             </div>
         </section>
     </AppLayout>

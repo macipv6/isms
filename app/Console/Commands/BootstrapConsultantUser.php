@@ -63,10 +63,18 @@ class BootstrapConsultantUser extends Command
 
         $organization = Organization::query()->firstOrCreate(
             ['slug' => $slug],
-            ['name' => $organizationName, 'entra_tenant_id' => $tenantId, 'is_active' => true],
+            [
+                'name' => $organizationName,
+                'organization_type' => 'internal',
+                'entra_tenant_id' => $tenantId,
+                'is_active' => true,
+            ],
         );
 
-        $organization->forceFill(['entra_tenant_id' => $tenantId])->save();
+        $organization->forceFill([
+            'organization_type' => 'internal',
+            'entra_tenant_id' => $tenantId,
+        ])->save();
 
         User::query()->updateOrCreate(
             ['entra_tenant_id' => $tenantId, 'entra_object_id' => $objectId],

@@ -19,8 +19,14 @@ class Organization extends Model
     protected $fillable = [
         'name',
         'slug',
+        'organization_type',
         'industry',
         'employee_count',
+        'address',
+        'contact_name',
+        'contact_email',
+        'contact_phone',
+        'notes',
         'entra_tenant_id',
         'is_active',
     ];
@@ -39,5 +45,13 @@ class Organization extends Model
     public function users(): HasMany
     {
         return $this->hasMany(User::class);
+    }
+
+    /**
+     * @return HasMany<IsmsProject, $this>
+     */
+    public function projects(): HasMany
+    {
+        return $this->hasMany(IsmsProject::class);
     }
 }
