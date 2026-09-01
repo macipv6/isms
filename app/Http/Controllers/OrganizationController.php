@@ -72,35 +72,11 @@ class OrganizationController extends Controller
                 'target_date',
                 'completed_at',
             ])
-            ->map(function (IsmsProject $project) use ($organization, $assessmentProgress): array {
-                $project->setRelation('organization', $organization);
-                $assessment = $project->assessment;
-                $progress = $assessment instanceof ProjectAssessment
-                    ? $assessmentProgress->for($assessment)
-                    : null;
-
-                return [
-                    ...$project->only([
-                        'id',
-                        'name',
-                        'framework',
-                        'approach',
-                        'bcm_level',
-                        'status',
-                        'started_at',
-                        'target_date',
-                        'completed_at',
-                    ]),
-                    'assessment_started' => $assessment instanceof ProjectAssessment,
-                    'assessment_url' => '/organizations/'.$organization->id.'/projects/'.$project->id.'/assessment',
-                    'assessment_progress' => $progress === null ? null : [
-                        'answered' => $progress['answered'],
-                        'total' => $progress['total'],
-                        'percentage' => $progress['percentage'],
-                    ],
-                    'can_assess' => Gate::allows('answerAssessment', $project),
-                ];
-            });
+            ->map(fn (IsmsProject $project): array => $this->assessmentProjectData(
+                $project,
+                $organization,
+                $assessmentProgress,
+            ));
 
         return Inertia::render('organizations/Show', [
             'organization' => $organization,
@@ -187,6 +163,43 @@ class OrganizationController extends Controller
     private function ensureCustomer(Organization $organization): void
     {
         abort_unless($organization->organization_type === 'customer', 404);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function assessmentProjectData(
+        IsmsProject $project,
+        Organization $organization,
+        AssessmentProgress $assessmentProgress,
+    ): array {
+        $project->setRelation('organization', $organization);
+        $assessment = $project->assessment;
+        $progress = $assessment instanceof ProjectAssessment
+            ? $assessmentProgress->for($assessment)
+            : null;
+
+        return [
+            ...$project->only([
+                'id',
+                'name',
+                'framework',
+                'approach',
+                'bcm_level',
+                'status',
+                'started_at',
+                'target_date',
+                'completed_at',
+            ]),
+            'assessment_started' => $assessment instanceof ProjectAssessment,
+            'assessment_url' => '/organizations/'.$organization->id.'/projects/'.$project->id.'/assessment',
+            'assessment_progress' => $progress === null ? null : [
+                'answered' => $progress['answered'],
+                'total' => $progress['total'],
+                'percentage' => $progress['percentage'],
+            ],
+            'can_assess' => Gate::allows('answerAssessment', $project),
+        ];
     }
 
     private function actor(Request $request): User
