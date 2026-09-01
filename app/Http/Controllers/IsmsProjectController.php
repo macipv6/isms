@@ -11,9 +11,55 @@ use App\Services\Audit\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class IsmsProjectController extends Controller
 {
+    public function create(Organization $organization): Response
+    {
+        $this->ensureCustomer($organization);
+        Gate::authorize('create', [IsmsProject::class, $organization]);
+
+        return Inertia::render('projects/Create', [
+            'organization' => $organization->only(['id', 'name']),
+            'defaults' => [
+                'framework' => 'BSI',
+                'approach' => 'basis_absicherung',
+                'bcm_level' => 'aufbau_bcms',
+                'status' => 'draft',
+            ],
+        ]);
+    }
+
+    public function edit(
+        Organization $organization,
+        IsmsProject $project,
+    ): Response {
+        $this->ensureCustomer($organization);
+        $this->ensureProjectBelongsToOrganization($project, $organization);
+        Gate::authorize('update', $project);
+
+        return Inertia::render('projects/Edit', [
+            'organization' => $organization->only(['id', 'name']),
+            'project' => [
+                ...$project->only([
+                    'id',
+                    'name',
+                    'description',
+                    'framework',
+                    'approach',
+                    'bcm_level',
+                    'status',
+                    'scope_text',
+                ]),
+                'started_at' => $project->started_at?->toDateString(),
+                'target_date' => $project->target_date?->toDateString(),
+                'completed_at' => $project->completed_at?->toDateString(),
+            ],
+        ]);
+    }
+
     public function store(
         StoreProjectRequest $request,
         Organization $organization,

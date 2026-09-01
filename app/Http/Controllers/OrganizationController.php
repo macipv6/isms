@@ -35,7 +35,15 @@ class OrganizationController extends Controller
 
         return Inertia::render('organizations/Index', [
             'organizations' => $organizations,
+            'canManage' => Gate::allows('create', Organization::class),
         ]);
+    }
+
+    public function create(): Response
+    {
+        Gate::authorize('create', Organization::class);
+
+        return Inertia::render('organizations/Create');
     }
 
     public function show(Organization $organization): Response
@@ -44,6 +52,30 @@ class OrganizationController extends Controller
         Gate::authorize('view', $organization);
 
         return Inertia::render('organizations/Show', [
+            'organization' => $organization,
+            'projects' => $organization->projects()
+                ->orderByDesc('created_at')
+                ->get([
+                    'id',
+                    'name',
+                    'framework',
+                    'approach',
+                    'bcm_level',
+                    'status',
+                    'started_at',
+                    'target_date',
+                    'completed_at',
+                ]),
+            'canManage' => Gate::allows('update', $organization),
+        ]);
+    }
+
+    public function edit(Organization $organization): Response
+    {
+        $this->ensureCustomer($organization);
+        Gate::authorize('update', $organization);
+
+        return Inertia::render('organizations/Edit', [
             'organization' => $organization,
         ]);
     }

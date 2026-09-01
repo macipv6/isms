@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { router, usePage } from '@inertiajs/vue3';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import type { AuthProps } from '@/types/auth';
 
@@ -17,15 +17,29 @@ function logout(): void {
             <div
                 class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4"
             >
-                <div>
-                    <p
-                        class="text-xs font-semibold tracking-[0.22em] text-slate-400 uppercase"
-                    >
-                        ISMS Builder
-                    </p>
-                    <p v-if="user" class="mt-1 text-sm text-slate-300">
-                        {{ user.name }} · {{ user.role }}
-                    </p>
+                <div class="flex items-center gap-8">
+                    <div>
+                        <p
+                            class="text-xs font-semibold tracking-[0.22em] text-slate-400 uppercase"
+                        >
+                            ISMS Builder
+                        </p>
+                        <p v-if="user" class="mt-1 text-sm text-slate-300">
+                            {{ user.name }} · {{ user.role }}
+                        </p>
+                    </div>
+                    <nav class="hidden items-center gap-5 text-sm md:flex">
+                        <Link
+                            href="/dashboard"
+                            class="text-slate-300 hover:text-white"
+                            >Dashboard</Link
+                        >
+                        <Link
+                            href="/organizations"
+                            class="text-slate-300 hover:text-white"
+                            >Kunden</Link
+                        >
+                    </nav>
                 </div>
                 <button
                     type="button"
