@@ -21,6 +21,11 @@ class Organization extends Model
         'slug',
         'industry',
         'employee_count',
+        'address',
+        'contact_name',
+        'contact_email',
+        'contact_phone',
+        'notes',
         'entra_tenant_id',
         'is_active',
     ];
