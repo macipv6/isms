@@ -5,6 +5,7 @@ namespace Tests\Feature\Assessment;
 use App\Enums\UserRole;
 use App\Models\IsmsProject;
 use App\Models\Organization;
+use App\Models\ProjectAssessment;
 use App\Models\User;
 use App\Services\Assessment\AnswerValidator;
 use App\Services\Assessment\AnswerWriter;
@@ -75,7 +76,7 @@ class AnswerPersistenceTest extends TestCase
     }
 
     /**
-     * @return array{0: \App\Models\ProjectAssessment, 1: User}
+     * @return array{0: ProjectAssessment, 1: User}
      */
     private function assessment(): array
     {
