@@ -22,6 +22,7 @@ class ApplicabilityEvaluator
 
         return $assessment->questions()
             ->where('is_active', true)
+            ->with('answer')
             ->get()
             ->filter(fn (AssessmentQuestion $question): bool => $this->isApplicable($question, $answers))
             ->values();

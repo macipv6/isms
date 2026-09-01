@@ -58,7 +58,6 @@ class AssessmentController extends Controller
             ->with('catalogVersion')
             ->firstOrFail();
         $questions = $evaluator->applicableQuestions($assessment);
-        $questions->load('answer');
         $categories = [];
 
         foreach ($questions->groupBy('category_key') as $categoryQuestions) {
