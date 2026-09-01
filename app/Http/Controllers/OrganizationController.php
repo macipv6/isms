@@ -52,8 +52,7 @@ class OrganizationController extends Controller
     public function show(
         Organization $organization,
         AssessmentProgress $assessmentProgress,
-    ): Response
-    {
+    ): Response {
         $this->ensureCustomer($organization);
         Gate::authorize('view', $organization);
 
@@ -172,8 +171,7 @@ class OrganizationController extends Controller
         IsmsProject $project,
         Organization $organization,
         AssessmentProgress $assessmentProgress,
-    ): array
-    {
+    ): array {
         $project->setRelation('organization', $organization);
         $assessment = $project->assessment;
         $progress = $assessment instanceof ProjectAssessment
