@@ -35,4 +35,26 @@ class IsmsProjectPolicy
             && $project->organization->organization_type === 'customer'
             && $project->organization->is_active;
     }
+
+    public function viewAssessment(User $user, IsmsProject $project): bool
+    {
+        return $this->view($user, $project)
+            && in_array($user->role, [UserRole::Admin, UserRole::Consultant], true);
+    }
+
+    public function startAssessment(User $user, IsmsProject $project): bool
+    {
+        return $this->canWriteAssessment($user, $project);
+    }
+
+    public function answerAssessment(User $user, IsmsProject $project): bool
+    {
+        return $this->canWriteAssessment($user, $project);
+    }
+
+    private function canWriteAssessment(User $user, IsmsProject $project): bool
+    {
+        return $this->viewAssessment($user, $project)
+            && $project->organization->is_active;
+    }
 }

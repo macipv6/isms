@@ -13,6 +13,8 @@ class AuditLogger
         'entra_tenant_id',
         'changed_fields',
         'project_id',
+        'catalog_version',
+        'question_key',
     ];
 
     /**
