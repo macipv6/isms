@@ -12,6 +12,7 @@ use App\Services\Assessment\AssessmentStarter;
 use App\Services\Audit\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -28,19 +29,23 @@ class AssessmentController extends Controller
         $this->ensureOwnership($organization, $project);
         Gate::authorize('startAssessment', $project);
 
-        $assessment = $starter->start($project, $this->actor($request));
+        $actor = $this->actor($request);
 
-        if ($assessment->wasRecentlyCreated) {
-            $audit->record(
-                'assessment.started',
-                $this->actor($request),
-                [
-                    'project_id' => $project->id,
-                    'catalog_version' => $assessment->catalogVersion->version,
-                ],
-                $organization->id,
-            );
-        }
+        DB::transaction(function () use ($starter, $project, $actor, $audit, $organization): void {
+            $assessment = $starter->start($project, $actor);
+
+            if ($assessment->wasRecentlyCreated) {
+                $audit->record(
+                    'assessment.started',
+                    $actor,
+                    [
+                        'project_id' => $project->id,
+                        'catalog_version' => $assessment->catalog_version,
+                    ],
+                    $organization->id,
+                );
+            }
+        });
 
         return redirect($this->url($organization, $project));
     }
@@ -54,9 +59,7 @@ class AssessmentController extends Controller
         $this->ensureOwnership($organization, $project);
         Gate::authorize('viewAssessment', $project);
 
-        $assessment = $project->assessment()
-            ->with('catalogVersion')
-            ->firstOrFail();
+        $assessment = $project->assessment()->firstOrFail();
         $questions = $evaluator->applicableQuestions($assessment);
         $categories = [];
 
@@ -76,7 +79,7 @@ class AssessmentController extends Controller
         return Inertia::render('assessments/Show', [
             'organization' => $organization->only(['id', 'name']),
             'project' => $project->only(['id', 'name']),
-            'catalogVersion' => $assessment->catalogVersion->version,
+            'catalogVersion' => $assessment->catalog_version,
             'progress' => $progress->for($assessment),
             'categories' => $categories,
             'canAnswer' => Gate::allows('answerAssessment', $project),

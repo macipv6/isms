@@ -34,7 +34,9 @@ class CatalogVersion extends Model
             ->where('status', CatalogStatus::Published->value)
             ->whereHas(
                 'framework',
-                fn (Builder $query): Builder => $query->where('key', $frameworkKey),
+                fn (Builder $query): Builder => $query
+                    ->where('key', $frameworkKey)
+                    ->where('is_active', true),
             )
             ->latest('published_at')
             ->firstOrFail();

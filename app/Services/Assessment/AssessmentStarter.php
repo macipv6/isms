@@ -28,10 +28,13 @@ class AssessmentStarter
                 return $existing;
             }
 
-            $catalog = CatalogVersion::publishedForFramework($lockedProject->framework);
+            $catalog = CatalogVersion::publishedForFramework($lockedProject->framework)
+                ->load('framework');
             $assessment = ProjectAssessment::query()->create([
                 'project_id' => $lockedProject->id,
                 'catalog_version_id' => $catalog->id,
+                'framework_key' => $catalog->framework->key,
+                'catalog_version' => $catalog->version,
                 'status' => AssessmentStatus::InProgress,
                 'started_by' => $actor->id,
                 'started_at' => now(),

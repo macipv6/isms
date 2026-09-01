@@ -11,6 +11,7 @@ use App\Services\Assessment\AnswerValidator;
 use App\Services\Assessment\AnswerWriter;
 use App\Services\Audit\AuditLogger;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 
 class AssessmentAnswerController extends Controller
 {
@@ -27,27 +28,39 @@ class AssessmentAnswerController extends Controller
         $actor = $request->user();
         abort_unless($actor instanceof User, 401);
 
-        $answer = $writer->save(
+        DB::transaction(function () use (
+            $writer,
             $assessment,
             $question,
-            $validator->validate($question, $request->validated()),
+            $validator,
+            $request,
             $actor,
-        );
-        $changedFields = array_values(array_diff(
-            array_keys($answer->getChanges()),
-            ['id', 'created_at', 'updated_at', 'answered_at', 'answered_by'],
-        ));
+            $audit,
+            $project,
+            $organization,
+        ): void {
+            $answer = $writer->save(
+                $assessment,
+                $question,
+                $validator->validate($question, $request->validated()),
+                $actor,
+            );
+            $changedFields = array_values(array_diff(
+                array_keys($answer->getChanges()),
+                ['id', 'created_at', 'updated_at', 'answered_at', 'answered_by'],
+            ));
 
-        $audit->record(
-            'assessment.answer_saved',
-            $actor,
-            [
-                'project_id' => $project->id,
-                'question_key' => $question->question_key,
-                'changed_fields' => $changedFields,
-            ],
-            $organization->id,
-        );
+            $audit->record(
+                'assessment.answer_saved',
+                $actor,
+                [
+                    'project_id' => $project->id,
+                    'question_key' => $question->question_key,
+                    'changed_fields' => $changedFields,
+                ],
+                $organization->id,
+            );
+        });
 
         return redirect('/organizations/'.$organization->id.'/projects/'.$project->id.'/assessment')
             ->with('success', 'Antwort gespeichert.');

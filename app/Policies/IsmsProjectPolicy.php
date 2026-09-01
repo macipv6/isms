@@ -39,6 +39,7 @@ class IsmsProjectPolicy
     public function viewAssessment(User $user, IsmsProject $project): bool
     {
         return $this->view($user, $project)
+            && $user->organization?->organization_type === 'internal'
             && in_array($user->role, [UserRole::Admin, UserRole::Consultant], true);
     }
 

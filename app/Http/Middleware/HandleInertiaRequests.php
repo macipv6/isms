@@ -26,6 +26,11 @@ class HandleInertiaRequests extends Middleware
                     'role' => $user->role->value,
                 ] : null,
             ],
+            'flash' => [
+                'success' => fn (): ?string => $request->session()->has('success')
+                    ? (string) $request->session()->get('success')
+                    : null,
+            ],
         ];
     }
 }

@@ -168,6 +168,7 @@ function submit(): void {
             <input
                 v-else
                 type="number"
+                step="any"
                 :value="typeof form.answer === 'number' ? form.answer : ''"
                 :disabled="!canAnswer"
                 class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"
@@ -217,6 +218,12 @@ function submit(): void {
                 class="text-sm text-red-300"
             >
                 {{ form.errors.compliance_status }}
+            </p>
+            <p v-if="form.errors.comment" class="text-sm text-red-300">
+                {{ form.errors.comment }}
+            </p>
+            <p v-if="form.recentlySuccessful" class="text-sm text-emerald-300">
+                Antwort gespeichert.
             </p>
             <button
                 v-if="canAnswer"

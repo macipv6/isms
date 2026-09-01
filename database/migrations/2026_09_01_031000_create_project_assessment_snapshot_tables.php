@@ -13,6 +13,8 @@ return new class extends Migration
             $table->uuid('id')->primary();
             $table->foreignUuid('project_id')->constrained('isms_projects')->cascadeOnUpdate()->restrictOnDelete()->unique();
             $table->foreignUuid('catalog_version_id')->constrained()->cascadeOnUpdate()->restrictOnDelete();
+            $table->string('framework_key', 32);
+            $table->string('catalog_version', 32);
             $table->string('status', 24)->default(AssessmentStatus::InProgress->value);
             $table->foreignUuid('started_by')->constrained('users')->cascadeOnUpdate()->restrictOnDelete();
             $table->timestampTz('started_at');

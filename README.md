@@ -19,6 +19,7 @@ docker compose run --rm node npm install
 docker compose up -d db app web node
 docker compose exec app php artisan key:generate
 docker compose exec app php artisan migrate --force
+docker compose exec app php artisan db:seed --force
 ```
 
 Configure the Microsoft values in `.env` as described in [`docs/setup/entra-id.md`](docs/setup/entra-id.md), then create the initial local allow-list user:

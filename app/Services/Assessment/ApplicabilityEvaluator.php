@@ -85,7 +85,11 @@ class ApplicabilityEvaluator
             throw new DomainException('Unknown assessment rule operator.');
         }
 
-        $actual = $answers[$rule['trigger_question_key']] ?? null;
+        if (! array_key_exists($rule['trigger_question_key'], $answers)) {
+            return false;
+        }
+
+        $actual = $answers[$rule['trigger_question_key']];
         $expected = $rule['expected_value'];
 
         return match ($operator) {

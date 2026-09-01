@@ -15,6 +15,8 @@ class ProjectAssessment extends Model
     protected $fillable = [
         'project_id',
         'catalog_version_id',
+        'framework_key',
+        'catalog_version',
         'status',
         'started_by',
         'started_at',

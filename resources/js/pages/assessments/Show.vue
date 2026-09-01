@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import AssessmentProgress from '@/components/AssessmentProgress.vue';
 import AssessmentQuestionCard from '@/components/AssessmentQuestionCard.vue';
@@ -18,6 +18,15 @@ const props = defineProps<{
     categories: AssessmentCategory[];
     canAnswer: boolean;
 }>();
+
+interface AssessmentPageProps {
+    [key: string]: unknown;
+    flash: {
+        success: string | null;
+    };
+}
+
+const page = usePage<AssessmentPageProps>();
 
 const selectedKey = ref(props.categories[0]?.key ?? '');
 const selectedCategory = computed(
@@ -68,6 +77,14 @@ watch(
         </div>
 
         <AssessmentProgress :progress="progress" class="mt-8" />
+
+        <p
+            v-if="page.props.flash.success"
+            class="mt-5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200"
+            role="status"
+        >
+            {{ page.props.flash.success }}
+        </p>
 
         <div class="mt-8 grid gap-8 lg:grid-cols-[280px_1fr]">
             <nav class="space-y-2" aria-label="Themenbereiche">
