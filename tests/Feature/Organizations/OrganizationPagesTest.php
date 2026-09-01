@@ -52,7 +52,14 @@ class OrganizationPagesTest extends TestCase
                 ->where('canManage', false)
                 ->has('projects', 1)
                 ->where('projects.0.id', $project->id)
-                ->where('projects.0.status', ProjectStatus::Active->value));
+                ->where('projects.0.status', ProjectStatus::Active->value)
+                ->where('projects.0.assessment_started', false)
+                ->where('projects.0.can_assess', true)
+                ->where(
+                    'projects.0.assessment_url',
+                    '/organizations/'.$customer->id.'/projects/'.$project->id.'/assessment',
+                )
+                ->where('projects.0.assessment_progress', null));
     }
 
     public function test_consultant_cannot_open_customer_create_or_edit_page(): void
