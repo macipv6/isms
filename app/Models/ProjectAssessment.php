@@ -61,4 +61,12 @@ class ProjectAssessment extends Model
             ->orderBy('category_sort_order')
             ->orderBy('question_sort_order');
     }
+
+    /**
+     * @return HasMany<ProjectAnswer, $this>
+     */
+    public function answers(): HasMany
+    {
+        return $this->hasMany(ProjectAnswer::class, 'project_assessment_id');
+    }
 }

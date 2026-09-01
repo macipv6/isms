@@ -5,6 +5,7 @@ namespace App\Services\Assessment;
 use App\Enums\RuleAction;
 use App\Enums\RuleOperator;
 use App\Models\AssessmentQuestion;
+use App\Models\ProjectAnswer;
 use App\Models\ProjectAssessment;
 use DomainException;
 use Illuminate\Support\Collection;
@@ -15,13 +16,32 @@ class ApplicabilityEvaluator
      * @param  array<string, mixed>  $answers
      * @return Collection<int, AssessmentQuestion>
      */
-    public function applicableQuestions(ProjectAssessment $assessment, array $answers = []): Collection
+    public function applicableQuestions(ProjectAssessment $assessment, ?array $answers = null): Collection
     {
+        $answers ??= $this->answerValues($assessment);
+
         return $assessment->questions()
             ->where('is_active', true)
             ->get()
             ->filter(fn (AssessmentQuestion $question): bool => $this->isApplicable($question, $answers))
             ->values();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function answerValues(ProjectAssessment $assessment): array
+    {
+        $values = [];
+
+        $assessment->answers()
+            ->with('question')
+            ->get()
+            ->each(function (ProjectAnswer $answer) use (&$values): void {
+                $values[$answer->question->question_key] = $answer->valueForRules();
+            });
+
+        return $values;
     }
 
     /**

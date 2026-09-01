@@ -6,6 +6,7 @@ use App\Enums\AnswerType;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * @property AnswerType $answer_type
@@ -62,5 +63,13 @@ class AssessmentQuestion extends Model
     public function sourceQuestion(): BelongsTo
     {
         return $this->belongsTo(CatalogQuestion::class, 'source_question_id');
+    }
+
+    /**
+     * @return HasOne<ProjectAnswer, $this>
+     */
+    public function answer(): HasOne
+    {
+        return $this->hasOne(ProjectAnswer::class, 'assessment_question_id');
     }
 }
