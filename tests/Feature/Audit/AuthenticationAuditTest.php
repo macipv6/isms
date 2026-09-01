@@ -15,6 +15,7 @@ class AuthenticationAuditTest extends TestCase
     use RefreshDatabase;
 
     private const TENANT_ID = '11111111-1111-4111-8111-111111111111';
+
     private const OBJECT_ID = '22222222-2222-4222-8222-222222222222';
 
     protected function setUp(): void
@@ -76,10 +77,19 @@ class AuthenticationAuditTest extends TestCase
             issuer: 'https://login.microsoftonline.com/'.self::TENANT_ID.'/v2.0',
         );
 
-        $this->app->bind(EntraIdentityProvider::class, fn () => new class($identity) implements EntraIdentityProvider {
+        $this->app->bind(EntraIdentityProvider::class, fn () => new class($identity) implements EntraIdentityProvider
+        {
             public function __construct(private EntraIdentity $identity) {}
-            public function redirect(): RedirectResponse { return new RedirectResponse('/provider'); }
-            public function identityFromCallback(): EntraIdentity { return $this->identity; }
+
+            public function redirect(): RedirectResponse
+            {
+                return new RedirectResponse('/provider');
+            }
+
+            public function identityFromCallback(): EntraIdentity
+            {
+                return $this->identity;
+            }
         });
     }
 }

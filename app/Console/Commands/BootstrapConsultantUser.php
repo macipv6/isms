@@ -32,27 +32,32 @@ class BootstrapConsultantUser extends Command
 
         if (! Uuid::isValid($tenantId) || ! Uuid::isValid($objectId)) {
             $this->error('Tenant ID and Object ID must be valid UUIDs.');
+
             return self::FAILURE;
         }
 
         if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
             $this->error('Email address is invalid.');
+
             return self::FAILURE;
         }
 
         if ($name === '' || $organizationName === '') {
             $this->error('Name and organization must not be empty.');
+
             return self::FAILURE;
         }
 
         if ($role === null) {
             $this->error('Role must be admin or consultant.');
+
             return self::FAILURE;
         }
 
         $slug = Str::slug($organizationName);
         if ($slug === '') {
             $this->error('Organization name cannot be converted to a valid slug.');
+
             return self::FAILURE;
         }
 

@@ -14,6 +14,7 @@ class EntraAuthenticationTest extends TestCase
     use RefreshDatabase;
 
     private const TENANT_ID = '11111111-1111-4111-8111-111111111111';
+
     private const OBJECT_ID = '22222222-2222-4222-8222-222222222222';
 
     protected function setUp(): void
@@ -99,7 +100,8 @@ class EntraAuthenticationTest extends TestCase
 
     private function bindIdentityProvider(EntraIdentity $identity, string $redirectTo = '/provider'): void
     {
-        $this->app->bind(EntraIdentityProvider::class, fn () => new class($identity, $redirectTo) implements EntraIdentityProvider {
+        $this->app->bind(EntraIdentityProvider::class, fn () => new class($identity, $redirectTo) implements EntraIdentityProvider
+        {
             public function __construct(private EntraIdentity $identity, private string $redirectTo) {}
 
             public function redirect(): RedirectResponse

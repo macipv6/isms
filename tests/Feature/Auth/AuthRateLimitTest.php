@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth;
 use App\Auth\Entra\Contracts\EntraIdentityProvider;
 use App\Auth\Entra\Data\EntraIdentity;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use LogicException;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Tests\TestCase;
 
@@ -14,9 +15,17 @@ class AuthRateLimitTest extends TestCase
 
     public function test_microsoft_auth_redirect_is_limited_per_ip(): void
     {
-        $this->app->bind(EntraIdentityProvider::class, fn () => new class implements EntraIdentityProvider {
-            public function redirect(): RedirectResponse { return new RedirectResponse('/provider'); }
-            public function identityFromCallback(): EntraIdentity { throw new \LogicException('Not used.'); }
+        $this->app->bind(EntraIdentityProvider::class, fn () => new class implements EntraIdentityProvider
+        {
+            public function redirect(): RedirectResponse
+            {
+                return new RedirectResponse('/provider');
+            }
+
+            public function identityFromCallback(): EntraIdentity
+            {
+                throw new LogicException('Not used.');
+            }
         });
 
         for ($attempt = 1; $attempt <= 10; $attempt++) {
