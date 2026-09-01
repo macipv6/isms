@@ -70,6 +70,11 @@ jobs:
       - name: Backend checks
         run: composer test
 
+      - name: Frontend formatter preview
+        run: |
+          npm run check:fix
+          git diff -- resources/js resources/css vite.config.ts
+
       - name: Frontend lint
         run: npm run lint:check
 
