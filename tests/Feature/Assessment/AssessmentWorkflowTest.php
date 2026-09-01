@@ -54,6 +54,11 @@ class AssessmentWorkflowTest extends TestCase
             ->assertRedirect($url)
             ->assertSessionHas('success');
 
+        $this->actingAs($actor)
+            ->get($url)
+            ->assertInertia(fn (Assert $page): Assert => $page
+                ->where('flash.success', 'Antwort gespeichert.'));
+
         $this->assertDatabaseHas('project_answers', [
             'project_assessment_id' => $assessment->id,
             'assessment_question_id' => $question->id,

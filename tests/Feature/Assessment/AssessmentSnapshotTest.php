@@ -33,6 +33,8 @@ class AssessmentSnapshotTest extends TestCase
 
         $this->assertSame($project->id, $assessment->project_id);
         $this->assertSame($actor->id, $assessment->started_by);
+        $this->assertSame('BSI', $assessment->framework_key);
+        $this->assertSame('2026.1', $assessment->catalog_version);
         $this->assertSame('2026.1', $assessment->catalogVersion->version);
         $this->assertSame(CatalogQuestion::query()->where('is_active', true)->count(), $assessment->questions()->count());
         $this->assertSame($source->id, $snapshot->source_question_id);
@@ -80,6 +82,20 @@ class AssessmentSnapshotTest extends TestCase
         $this->assertNotNull($snapshotAfter);
         $this->assertNotSame('Nachträglich geänderter Katalogtext', $snapshotAfter->question_text);
         $this->assertSame('Täglich', $snapshotAfter->options[1]['label']);
+    }
+
+    public function test_catalog_version_metadata_is_frozen_for_existing_assessment(): void
+    {
+        $this->seed(AssessmentCatalogSeeder::class);
+        $assessment = app(AssessmentStarter::class)->start(
+            IsmsProject::factory()->create(),
+            $this->actor(),
+        );
+
+        $assessment->catalogVersion->update(['version' => 'central-version-changed']);
+
+        $this->assertSame('BSI', $assessment->fresh()?->framework_key);
+        $this->assertSame('2026.1', $assessment->fresh()?->catalog_version);
     }
 
     private function actor(): User

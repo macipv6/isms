@@ -63,6 +63,20 @@ class ApplicabilityEvaluatorTest extends TestCase
     }
 
     #[Test]
+    public function unanswered_not_equals_trigger_does_not_apply_include_or_exclude_rule(): void
+    {
+        $includeQuestion = $this->question([
+            $this->rule('cloud.provider', 'not_equals', 'none', 'include'),
+        ]);
+        $excludeQuestion = $this->question([
+            $this->rule('cloud.provider', 'not_equals', 'none', 'exclude'),
+        ]);
+
+        $this->assertFalse($this->evaluator->isApplicable($includeQuestion, []));
+        $this->assertTrue($this->evaluator->isApplicable($excludeQuestion, []));
+    }
+
+    #[Test]
     public function all_include_rules_must_match_and_matching_exclude_rule_wins(): void
     {
         $question = $this->question([

@@ -96,6 +96,35 @@ class AssessmentAuthorizationTest extends TestCase
         $this->assertDatabaseCount('project_answers', 0);
     }
 
+    public function test_customer_organization_user_cannot_access_any_customer_assessment(): void
+    {
+        $this->seed(AssessmentCatalogSeeder::class);
+        $internalActor = $this->user(UserRole::Consultant);
+        $customer = $this->customer();
+        $otherCustomer = $this->customer();
+        $project = IsmsProject::factory()->for($customer)->create();
+        $otherProject = IsmsProject::factory()->for($otherCustomer)->create();
+        $assessment = app(AssessmentStarter::class)->start($project, $internalActor);
+        $question = $assessment->questions()->where('question_key', 'governance.policy_exists')->sole();
+        $customerUser = User::factory()->for($customer)->create(['role' => UserRole::Admin]);
+
+        $this->actingAs($customerUser)
+            ->get($this->assessmentUrl($customer, $project))
+            ->assertForbidden();
+        $this->actingAs($customerUser)
+            ->post($this->assessmentUrl($otherCustomer, $otherProject))
+            ->assertForbidden();
+        $this->actingAs($customerUser)
+            ->put($this->assessmentUrl($customer, $project).'/questions/'.$question->id, [
+                'answer' => true,
+                'compliance_status' => 'fulfilled',
+            ])
+            ->assertForbidden();
+
+        $this->assertDatabaseCount('project_answers', 0);
+        $this->assertDatabaseCount('project_assessments', 1);
+    }
+
     private function assessmentUrl(Organization $organization, IsmsProject $project): string
     {
         return '/organizations/'.$organization->id.'/projects/'.$project->id.'/assessment';

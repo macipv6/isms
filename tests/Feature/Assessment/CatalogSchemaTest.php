@@ -7,6 +7,7 @@ use App\Models\CatalogVersion;
 use App\Models\Framework;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
@@ -119,5 +120,23 @@ class CatalogSchemaTest extends TestCase
             'version' => '2026.1',
             'status' => CatalogStatus::Draft,
         ]);
+    }
+
+    public function test_inactive_framework_cannot_supply_a_catalog_for_new_assessments(): void
+    {
+        $framework = Framework::query()->create([
+            'key' => 'BSI',
+            'name' => 'BSI-orientiertes ISMS',
+            'is_active' => false,
+        ]);
+        CatalogVersion::query()->create([
+            'framework_id' => $framework->id,
+            'version' => '2026.1',
+            'status' => CatalogStatus::Published,
+            'published_at' => '2026-09-01 00:00:00+00',
+        ]);
+
+        $this->expectException(ModelNotFoundException::class);
+        CatalogVersion::publishedForFramework('BSI');
     }
 }
