@@ -82,6 +82,22 @@ class StarterCatalogTest extends TestCase
         $this->assertSame($firstCounts, $this->catalogCounts());
     }
 
+    public function test_reseeding_does_not_mutate_an_existing_published_catalog(): void
+    {
+        $this->seed(AssessmentCatalogSeeder::class);
+        $question = CatalogQuestion::query()
+            ->where('question_key', 'governance.policy_exists')
+            ->sole();
+        $question->update(['title' => 'Bereits veröffentlichte Fassung']);
+
+        $this->seed(AssessmentCatalogSeeder::class);
+
+        $this->assertSame(
+            'Bereits veröffentlichte Fassung',
+            $question->fresh()?->title,
+        );
+    }
+
     /**
      * @return array<string, int>
      */
