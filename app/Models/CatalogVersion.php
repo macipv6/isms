@@ -37,7 +37,7 @@ class CatalogVersion extends Model
                 fn (Builder $query): Builder => $query->where('key', $frameworkKey),
             )
             ->latest('published_at')
-            ->sole();
+            ->firstOrFail();
     }
 
     /**
