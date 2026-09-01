@@ -49,6 +49,8 @@ export default defineConfig({
             '.github/**',
             'docs/**',
             'composer.json',
+            'compose.yaml',
+            'package.json',
             'pint.json',
             'tsconfig.json',
             'resources/views/mail/*',
