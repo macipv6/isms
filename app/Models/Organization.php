@@ -46,4 +46,12 @@ class Organization extends Model
     {
         return $this->hasMany(User::class);
     }
+
+    /**
+     * @return HasMany<IsmsProject, $this>
+     */
+    public function projects(): HasMany
+    {
+        return $this->hasMany(IsmsProject::class);
+    }
 }
