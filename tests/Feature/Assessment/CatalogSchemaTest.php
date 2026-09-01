@@ -5,9 +5,9 @@ namespace Tests\Feature\Assessment;
 use App\Enums\CatalogStatus;
 use App\Models\CatalogVersion;
 use App\Models\Framework;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
