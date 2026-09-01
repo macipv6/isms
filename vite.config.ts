@@ -7,10 +7,55 @@ import { defineConfig, lazyPlugins } from 'vite-plus';
 
 export default defineConfig({
     plugins: lazyPlugins(() => [
-        laravel({ input: ['resources/css/app.css', 'resources/js/app.ts'], refresh: true }),
+        laravel({
+            input: ['resources/css/app.css', 'resources/js/app.ts'],
+            refresh: true,
+        }),
         inertia(),
         tailwindcss(),
-        vue({ template: { transformAssetUrls: { base: null, includeAbsolute: false } } }),
+        vue({
+            template: {
+                transformAssetUrls: {
+                    base: null,
+                    includeAbsolute: false,
+                },
+            },
+        }),
         wayfinder({ formVariants: true }),
     ]),
+    lint: {
+        ignorePatterns: [
+            'vendor/**',
+            'node_modules/**',
+            'public/**',
+            'bootstrap/ssr/**',
+            'resources/js/actions/**',
+            'resources/js/routes/**',
+            'resources/js/wayfinder/**',
+        ],
+        options: {
+            denyWarnings: true,
+            typeAware: true,
+        },
+    },
+    fmt: {
+        printWidth: 80,
+        tabWidth: 4,
+        singleQuote: true,
+        semi: true,
+        singleAttributePerLine: false,
+        htmlWhitespaceSensitivity: 'css',
+        ignorePatterns: [
+            '.github/**',
+            'docs/**',
+            'composer.json',
+            'pint.json',
+            'tsconfig.json',
+            'resources/views/mail/*',
+        ],
+        sortTailwindcss: {
+            functions: ['clsx', 'cn', 'cva'],
+            entryPoint: 'resources/css/app.css',
+        },
+    },
 });
