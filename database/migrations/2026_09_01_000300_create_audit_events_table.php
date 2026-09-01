@@ -21,7 +21,7 @@ return new class extends Migration
         });
 
         DB::unprepared(<<<'SQL'
-CREATE FUNCTION reject_audit_event_mutation() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION reject_audit_event_mutation() RETURNS trigger AS $$
 BEGIN
     RAISE EXCEPTION 'audit_events are append-only';
 END;
