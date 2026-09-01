@@ -119,10 +119,10 @@ class AnswerValidator
      */
     private function optionValues(AssessmentQuestion $question): array
     {
-        return array_values(array_map(
+        return array_map(
             fn (array $option): string => $option['value'],
             $question->options,
-        ));
+        );
     }
 
     private function comment(?string $comment): ?string
