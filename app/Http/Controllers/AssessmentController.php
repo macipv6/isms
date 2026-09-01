@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\AssessmentQuestion;
 use App\Models\IsmsProject;
 use App\Models\Organization;
-use App\Models\ProjectAssessment;
 use App\Models\User;
 use App\Services\Assessment\ApplicabilityEvaluator;
 use App\Services\Assessment\AssessmentProgress;
