@@ -45,6 +45,7 @@ class ProjectAuditTest extends TestCase
         $project = IsmsProject::factory()->for($customer)->create([
             'created_by' => $admin->id,
             'name' => 'Alt',
+            'description' => null,
             'scope_text' => 'Alter Scope',
         ]);
 

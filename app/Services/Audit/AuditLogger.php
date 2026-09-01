@@ -12,6 +12,7 @@ class AuditLogger
         'reason',
         'entra_tenant_id',
         'changed_fields',
+        'project_id',
     ];
 
     /**

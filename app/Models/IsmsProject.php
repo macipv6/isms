@@ -20,7 +20,6 @@ class IsmsProject extends Model
     use HasUuids;
 
     protected $fillable = [
-        'organization_id',
         'name',
         'description',
         'framework',
@@ -31,7 +30,6 @@ class IsmsProject extends Model
         'started_at',
         'target_date',
         'completed_at',
-        'created_by',
     ];
 
     protected function casts(): array
