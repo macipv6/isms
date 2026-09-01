@@ -18,6 +18,7 @@ class OrganizationFactory extends Factory
         return [
             'name' => $name,
             'slug' => Str::slug($name).'-'.fake()->unique()->numberBetween(1000, 9999),
+            'organization_type' => 'internal',
             'industry' => fake()->randomElement(['IT', 'Manufacturing', 'Services']),
             'employee_count' => fake()->numberBetween(5, 250),
             'address' => fake()->address(),
