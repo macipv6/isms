@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\AssessmentAnswerController;
+use App\Http\Controllers\AssessmentController;
 use App\Http\Controllers\Auth\EntraAuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\IsmsProjectController;
@@ -29,6 +31,10 @@ Route::middleware(['auth', 'active-user'])->group(function (): void {
     Route::post('/organizations/{organization}/projects', [IsmsProjectController::class, 'store'])->name('projects.store');
     Route::get('/organizations/{organization}/projects/{project}/edit', [IsmsProjectController::class, 'edit'])->name('projects.edit');
     Route::put('/organizations/{organization}/projects/{project}', [IsmsProjectController::class, 'update'])->name('projects.update');
+
+    Route::post('/organizations/{organization}/projects/{project}/assessment', [AssessmentController::class, 'start'])->name('assessments.start');
+    Route::get('/organizations/{organization}/projects/{project}/assessment', [AssessmentController::class, 'show'])->name('assessments.show');
+    Route::put('/organizations/{organization}/projects/{project}/assessment/questions/{question}', [AssessmentAnswerController::class, 'update'])->name('assessments.answers.update');
 
     Route::post('/logout', [EntraAuthController::class, 'logout'])->name('logout');
 });

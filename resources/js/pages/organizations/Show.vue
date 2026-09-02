@@ -22,6 +22,10 @@ function deactivate(organizationId: string): void {
         router.patch(`/organizations/${organizationId}/deactivate`);
     }
 }
+
+function startAssessment(url: string): void {
+    router.post(url);
+}
 </script>
 
 <template>
@@ -170,6 +174,36 @@ function deactivate(organizationId: string): void {
                         Start: {{ project.started_at ?? 'offen' }} · Ziel:
                         {{ project.target_date ?? 'offen' }}
                     </p>
+                    <div
+                        class="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-4"
+                    >
+                        <p class="text-sm text-slate-400">
+                            <template v-if="project.assessment_progress">
+                                Bewertung:
+                                {{ project.assessment_progress.answered }}/{{
+                                    project.assessment_progress.total
+                                }}
+                                · {{ project.assessment_progress.percentage }} %
+                            </template>
+                            <template v-else
+                                >Bewertung noch nicht gestartet</template
+                            >
+                        </p>
+                        <Link
+                            v-if="project.assessment_started"
+                            :href="project.assessment_url"
+                            class="rounded-lg bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-400"
+                            >Bewertung fortsetzen</Link
+                        >
+                        <button
+                            v-else-if="project.can_assess"
+                            type="button"
+                            class="rounded-lg border border-cyan-700 px-4 py-2 text-sm font-semibold text-cyan-200 hover:bg-cyan-950/40"
+                            @click="startAssessment(project.assessment_url)"
+                        >
+                            Bewertung starten
+                        </button>
+                    </div>
                 </article>
             </div>
             <div

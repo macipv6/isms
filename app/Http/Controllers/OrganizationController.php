@@ -4,8 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\Organizations\StoreOrganizationRequest;
 use App\Http\Requests\Organizations\UpdateOrganizationRequest;
+use App\Models\IsmsProject;
 use App\Models\Organization;
+use App\Models\ProjectAssessment;
 use App\Models\User;
+use App\Services\Assessment\AssessmentProgress;
 use App\Services\Audit\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -46,26 +49,37 @@ class OrganizationController extends Controller
         return Inertia::render('organizations/Create');
     }
 
-    public function show(Organization $organization): Response
-    {
+    public function show(
+        Organization $organization,
+        AssessmentProgress $assessmentProgress,
+    ): Response {
         $this->ensureCustomer($organization);
         Gate::authorize('view', $organization);
 
+        $projects = $organization->projects()
+            ->with('assessment')
+            ->orderByDesc('created_at')
+            ->get([
+                'id',
+                'organization_id',
+                'name',
+                'framework',
+                'approach',
+                'bcm_level',
+                'status',
+                'started_at',
+                'target_date',
+                'completed_at',
+            ])
+            ->map(fn (IsmsProject $project): array => $this->assessmentProjectData(
+                $project,
+                $organization,
+                $assessmentProgress,
+            ));
+
         return Inertia::render('organizations/Show', [
             'organization' => $organization,
-            'projects' => $organization->projects()
-                ->orderByDesc('created_at')
-                ->get([
-                    'id',
-                    'name',
-                    'framework',
-                    'approach',
-                    'bcm_level',
-                    'status',
-                    'started_at',
-                    'target_date',
-                    'completed_at',
-                ]),
+            'projects' => $projects,
             'canManage' => Gate::allows('update', $organization),
         ]);
     }
@@ -148,6 +162,43 @@ class OrganizationController extends Controller
     private function ensureCustomer(Organization $organization): void
     {
         abort_unless($organization->organization_type === 'customer', 404);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function assessmentProjectData(
+        IsmsProject $project,
+        Organization $organization,
+        AssessmentProgress $assessmentProgress,
+    ): array {
+        $project->setRelation('organization', $organization);
+        $assessment = $project->assessment;
+        $progress = $assessment instanceof ProjectAssessment
+            ? $assessmentProgress->for($assessment)
+            : null;
+
+        return [
+            ...$project->only([
+                'id',
+                'name',
+                'framework',
+                'approach',
+                'bcm_level',
+                'status',
+                'started_at',
+                'target_date',
+                'completed_at',
+            ]),
+            'assessment_started' => $assessment instanceof ProjectAssessment,
+            'assessment_url' => '/organizations/'.$organization->id.'/projects/'.$project->id.'/assessment',
+            'assessment_progress' => $progress === null ? null : [
+                'answered' => $progress['answered'],
+                'total' => $progress['total'],
+                'percentage' => $progress['percentage'],
+            ],
+            'can_assess' => Gate::allows('answerAssessment', $project),
+        ];
     }
 
     private function actor(Request $request): User

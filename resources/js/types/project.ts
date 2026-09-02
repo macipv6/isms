@@ -10,6 +10,14 @@ export interface ProjectSummary {
     started_at: string | null;
     target_date: string | null;
     completed_at: string | null;
+    assessment_started: boolean;
+    assessment_url: string;
+    assessment_progress: {
+        answered: number;
+        total: number;
+        percentage: number;
+    } | null;
+    can_assess: boolean;
 }
 
 export interface ProjectDetails extends ProjectSummary {

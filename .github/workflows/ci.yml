@@ -70,6 +70,12 @@ jobs:
       - name: Backend checks
         run: composer test
 
+      - name: Verify reversible migrations and starter catalog
+        run: |
+          php artisan migrate:rollback --force
+          php artisan migrate --force
+          php artisan db:seed --force
+
       - name: Frontend lint
         run: npm run lint:check
 
