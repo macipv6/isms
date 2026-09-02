@@ -21,6 +21,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class WorkItemSchemaTest extends TestCase
@@ -144,15 +145,44 @@ class WorkItemSchemaTest extends TestCase
         EvidenceFile::factory()->for($project)->create(['sha256' => str_repeat('a', 64)]);
     }
 
-    public function test_evidence_original_metadata_cannot_be_changed_after_creation(): void
+    #[DataProvider('immutableEvidenceMetadataFields')]
+    public function test_each_evidence_original_metadata_field_cannot_be_changed(
+        string $field,
+        mixed $replacement,
+    ): void
     {
         $evidence = EvidenceFile::factory()->create();
 
+        if ($field === 'uploaded_by') {
+            $replacement = User::factory()->create()->id;
+        }
+        if ($field === 'size_bytes') {
+            $replacement = $evidence->size_bytes + 1;
+        }
+
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage('evidence original metadata is immutable');
+        DB::table('evidence_files')->where('id', $evidence->id)->update([$field => $replacement]);
+    }
+
+    public function test_evidence_review_metadata_remains_mutable(): void
+    {
+        $evidence = EvidenceFile::factory()->create();
+        $reviewer = User::factory()->create();
+        $reviewedAt = now()->addMinute();
+
         DB::table('evidence_files')->where('id', $evidence->id)->update([
-            'original_name' => 'replacement.pdf',
+            'status' => EvidenceReviewStatus::Verified->value,
+            'reviewed_by' => $reviewer->id,
+            'reviewed_at' => $reviewedAt,
         ]);
+
+        $updated = $evidence->fresh();
+
+        $this->assertNotNull($updated);
+        $this->assertSame(EvidenceReviewStatus::Verified, $updated->status);
+        $this->assertSame($reviewer->id, $updated->reviewed_by);
+        $this->assertTrue($reviewedAt->equalTo($updated->reviewed_at));
     }
 
     public function test_finding_cannot_reference_an_assessment_from_another_project(): void
@@ -257,6 +287,60 @@ class WorkItemSchemaTest extends TestCase
         DB::table('evidence_finding_links')->insert(['id' => (string) Str::uuid(), ...$link]);
     }
 
+    public function test_evidence_question_relationship_can_attach_and_sync_without_pivot_id(): void
+    {
+        $project = IsmsProject::factory()->create();
+        [$assessment, $question] = $this->assessmentQuestion($project);
+        $replacementQuestion = $assessment->questions()->whereKeyNot($question->id)->firstOrFail();
+        $evidence = EvidenceFile::factory()->for($project)->create();
+        $pivot = [
+            'project_id' => $project->id,
+            'project_assessment_id' => $assessment->id,
+        ];
+
+        $evidence->questions()->attach($question, $pivot);
+        $this->assertNotNull(DB::table('evidence_question_links')->value('id'));
+
+        $evidence->questions()->sync([$replacementQuestion->id => $pivot]);
+
+        $this->assertDatabaseMissing('evidence_question_links', [
+            'evidence_file_id' => $evidence->id,
+            'assessment_question_id' => $question->id,
+        ]);
+        $this->assertDatabaseHas('evidence_question_links', [
+            'evidence_file_id' => $evidence->id,
+            'assessment_question_id' => $replacementQuestion->id,
+        ]);
+    }
+
+    public function test_evidence_finding_relationship_can_attach_and_sync_without_pivot_id(): void
+    {
+        $project = IsmsProject::factory()->create();
+        [$assessment, $question] = $this->assessmentQuestion($project);
+        $replacementQuestion = $assessment->questions()->whereKeyNot($question->id)->firstOrFail();
+        $finding = $this->findingFor($project, $assessment, $question);
+        $replacementFinding = $this->findingFor($project, $assessment, $replacementQuestion);
+        $evidence = EvidenceFile::factory()->for($project)->create();
+        $pivot = [
+            'project_id' => $project->id,
+            'project_assessment_id' => $assessment->id,
+        ];
+
+        $evidence->findings()->attach($finding, $pivot);
+        $this->assertNotNull(DB::table('evidence_finding_links')->value('id'));
+
+        $evidence->findings()->sync([$replacementFinding->id => $pivot]);
+
+        $this->assertDatabaseMissing('evidence_finding_links', [
+            'evidence_file_id' => $evidence->id,
+            'finding_id' => $finding->id,
+        ]);
+        $this->assertDatabaseHas('evidence_finding_links', [
+            'evidence_file_id' => $evidence->id,
+            'finding_id' => $replacementFinding->id,
+        ]);
+    }
+
     public function test_only_one_proposed_or_accepted_finding_can_exist_for_a_question(): void
     {
         $project = IsmsProject::factory()->create();
@@ -294,5 +378,22 @@ class WorkItemSchemaTest extends TestCase
             'assessment_question_id' => $question->id,
             'status' => $status,
         ]);
+    }
+
+    /**
+     * @return array<string, array{0: string, 1: mixed}>
+     */
+    public static function immutableEvidenceMetadataFields(): array
+    {
+        return [
+            'storage path' => ['storage_path', 'evidence/replacement.pdf'],
+            'original name' => ['original_name', 'replacement.pdf'],
+            'mime type' => ['mime_type', 'text/plain'],
+            'file kind' => ['file_kind', 'txt'],
+            'size bytes' => ['size_bytes', 4096],
+            'sha256' => ['sha256', str_repeat('b', 64)],
+            'uploaded by' => ['uploaded_by', null],
+            'uploaded at' => ['uploaded_at', '2030-01-01 00:00:00+00'],
+        ];
     }
 }
