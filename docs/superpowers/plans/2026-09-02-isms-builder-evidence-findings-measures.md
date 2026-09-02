@@ -365,6 +365,7 @@ Validate `status` with `Rule::enum(EvidenceReviewStatus::class)` and require `re
 ```php
 Route::post('/organizations/{organization}/projects/{project}/assessment/questions/{question}/evidence', [EvidenceController::class, 'store']);
 Route::post('/organizations/{organization}/projects/{project}/evidence/{evidence}/questions/{question}', [EvidenceController::class, 'linkQuestion']);
+Route::post('/organizations/{organization}/projects/{project}/findings/{finding}/evidence/{evidence}', [EvidenceController::class, 'linkFinding']);
 Route::patch('/organizations/{organization}/projects/{project}/evidence/{evidence}/review', [EvidenceController::class, 'review']);
 Route::get('/organizations/{organization}/projects/{project}/evidence/{evidence}/download', [EvidenceController::class, 'download']);
 ```
@@ -632,7 +633,7 @@ Extend the assessment query to eager-load evidence links, findings, and measures
 
 - [ ] **Step 4: Build the three focused Vue panels**
 
-`QuestionEvidencePanel` uploads one file with Inertia progress and shows linked files, status, protected download, and review form. `QuestionFindingPanel` shows history and an explicit proposal form only when eligible. `FindingMeasurePanel` shows accepted-finding progress and supports measure creation/edit/transition forms. Every form renders all returned field errors and one clear success state.
+`QuestionEvidencePanel` uploads one file with Inertia progress, links an existing project evidence record, and shows linked files, status, protected download, and review form. `QuestionFindingPanel` shows history, links existing project evidence to a finding, and exposes an explicit proposal form only when eligible. `FindingMeasurePanel` shows accepted-finding progress and supports measure creation/edit/transition forms. Every form renders all returned field errors and one clear success state.
 
 - [ ] **Step 5: Integrate panels without mixing answer form state**
 
