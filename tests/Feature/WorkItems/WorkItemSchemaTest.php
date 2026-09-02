@@ -181,7 +181,7 @@ class WorkItemSchemaTest extends TestCase
         $this->assertNotNull($updated);
         $this->assertSame(EvidenceReviewStatus::Verified, $updated->status);
         $this->assertSame($reviewer->id, $updated->reviewed_by);
-        $this->assertTrue($reviewedAt->equalTo($updated->reviewed_at));
+        $this->assertSame($reviewedAt->getTimestamp(), $updated->reviewed_at?->getTimestamp());
     }
 
     public function test_finding_cannot_reference_an_assessment_from_another_project(): void
