@@ -149,8 +149,7 @@ class WorkItemSchemaTest extends TestCase
     public function test_each_evidence_original_metadata_field_cannot_be_changed(
         string $field,
         mixed $replacement,
-    ): void
-    {
+    ): void {
         $evidence = EvidenceFile::factory()->create();
 
         if ($field === 'uploaded_by') {
