@@ -6,6 +6,8 @@ use App\Enums\AnswerType;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
@@ -71,5 +73,23 @@ class AssessmentQuestion extends Model
     public function answer(): HasOne
     {
         return $this->hasOne(ProjectAnswer::class, 'assessment_question_id');
+    }
+
+    /**
+     * @return HasMany<Finding, $this>
+     */
+    public function findings(): HasMany
+    {
+        return $this->hasMany(Finding::class, 'assessment_question_id');
+    }
+
+    /**
+     * @return BelongsToMany<EvidenceFile, $this>
+     */
+    public function evidenceFiles(): BelongsToMany
+    {
+        return $this->belongsToMany(EvidenceFile::class, 'evidence_question_links')
+            ->withPivot('project_id', 'project_assessment_id')
+            ->withTimestamps();
     }
 }

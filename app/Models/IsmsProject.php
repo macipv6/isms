@@ -70,4 +70,28 @@ class IsmsProject extends Model
     {
         return $this->hasOne(ProjectAssessment::class, 'project_id');
     }
+
+    /**
+     * @return HasMany<EvidenceFile, $this>
+     */
+    public function evidenceFiles(): HasMany
+    {
+        return $this->hasMany(EvidenceFile::class, 'project_id');
+    }
+
+    /**
+     * @return HasMany<Finding, $this>
+     */
+    public function findings(): HasMany
+    {
+        return $this->hasMany(Finding::class, 'project_id');
+    }
+
+    /**
+     * @return HasMany<Measure, $this>
+     */
+    public function measures(): HasMany
+    {
+        return $this->hasMany(Measure::class, 'project_id');
+    }
 }
