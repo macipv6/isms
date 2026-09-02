@@ -33,7 +33,7 @@ return new class extends Migration
         });
 
         DB::unprepared(<<<'SQL'
-            CREATE FUNCTION prevent_evidence_original_metadata_change()
+            CREATE OR REPLACE FUNCTION prevent_evidence_original_metadata_change()
             RETURNS TRIGGER AS $$
             BEGIN
                 IF NEW.storage_path IS DISTINCT FROM OLD.storage_path
