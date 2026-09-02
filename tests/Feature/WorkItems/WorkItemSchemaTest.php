@@ -288,8 +288,7 @@ class WorkItemSchemaTest extends TestCase
         ProjectAssessment $assessment,
         AssessmentQuestion $question,
         FindingStatus $status = FindingStatus::Proposed,
-    ): Finding
-    {
+    ): Finding {
         return Finding::factory()->for($project)->create([
             'project_assessment_id' => $assessment->id,
             'assessment_question_id' => $question->id,
