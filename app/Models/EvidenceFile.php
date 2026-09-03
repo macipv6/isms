@@ -76,7 +76,7 @@ class EvidenceFile extends Model
     }
 
     /**
-     * @return BelongsToMany<AssessmentQuestion, $this>
+     * @return BelongsToMany<AssessmentQuestion, $this, EvidenceQuestionLink>
      */
     public function questions(): BelongsToMany
     {
@@ -87,7 +87,7 @@ class EvidenceFile extends Model
     }
 
     /**
-     * @return BelongsToMany<Finding, $this>
+     * @return BelongsToMany<Finding, $this, EvidenceFindingLink>
      */
     public function findings(): BelongsToMany
     {

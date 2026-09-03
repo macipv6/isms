@@ -112,7 +112,7 @@ class Finding extends Model
     }
 
     /**
-     * @return BelongsToMany<EvidenceFile, $this>
+     * @return BelongsToMany<EvidenceFile, $this, EvidenceFindingLink>
      */
     public function evidenceFiles(): BelongsToMany
     {

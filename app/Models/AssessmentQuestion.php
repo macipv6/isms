@@ -84,7 +84,7 @@ class AssessmentQuestion extends Model
     }
 
     /**
-     * @return BelongsToMany<EvidenceFile, $this>
+     * @return BelongsToMany<EvidenceFile, $this, EvidenceQuestionLink>
      */
     public function evidenceFiles(): BelongsToMany
     {
