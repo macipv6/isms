@@ -34,8 +34,7 @@ class EvidenceReviewTest extends TestCase
     public function test_rejection_requires_a_note_and_audit_failure_rolls_back_the_review(): void
     {
         [$project, $evidence, $actor] = $this->context();
-        $this->app->instance(AuditLogger::class, new class extends AuditLogger
-        {
+        $this->app->instance(AuditLogger::class, new class extends AuditLogger {
             public function record(
                 string $eventType,
                 ?User $actor,

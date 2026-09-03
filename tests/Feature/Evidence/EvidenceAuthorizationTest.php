@@ -42,7 +42,7 @@ class EvidenceAuthorizationTest extends TestCase
             $this->actingAs($actor)->post($this->questionUrl($organization, $project, $question), [])->assertForbidden();
             $this->assertDatabaseMissing('audit_events', ['event_type' => 'evidence.reviewed']);
             $this->assertDatabaseCount('evidence_question_links', 0);
-            $this->assertCount(1, \Illuminate\Support\Facades\Storage::disk('evidence')->allFiles());
+            $this->assertCount(1, Storage::disk('evidence')->allFiles());
         }
 
         [$organization, $project, $question, $evidence] = $this->context();
