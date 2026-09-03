@@ -41,12 +41,12 @@ class ZipArchiveInspector
             for ($index = 0; $index < $archive->numFiles; $index++) {
                 $stat = $archive->statIndex($index, ZipArchive::FL_UNCHANGED);
 
-                if ($stat === false || ! isset($stat['name']) || ! is_string($stat['name'])) {
+                if ($stat === false) {
                     $this->reject();
                 }
 
                 $normalizedName = $this->normalizedEntryName($stat['name']);
-                $this->assertUnencrypted($archive, $index, $stat);
+                $this->assertUnencrypted($stat);
 
                 if ($this->isDirectory($archive, $index, $normalizedName)) {
                     continue;
@@ -55,7 +55,7 @@ class ZipArchiveInspector
                 $this->assertRegularNonExecutableFile($archive, $index);
                 $this->assertAllowedExtension($normalizedName);
 
-                if (! isset($stat['size']) || ! is_int($stat['size']) || $stat['size'] < 0) {
+                if ($stat['size'] < 0) {
                     $this->reject();
                 }
 
@@ -87,23 +87,11 @@ class ZipArchiveInspector
     }
 
     /**
-     * @param  array<string, mixed>  $stat
+     * @param  array{encryption_method: int}  $stat
      */
-    private function assertUnencrypted(ZipArchive $archive, int $index, array $stat): void
+    private function assertUnencrypted(array $stat): void
     {
-        $encryptionMethod = $stat['encryption_method'] ?? null;
-
-        if (is_int($encryptionMethod)) {
-            if ($encryptionMethod !== ZipArchive::EM_NONE) {
-                $this->reject();
-            }
-
-            return;
-        }
-
-        $encryptionName = $archive->getEncryptionNameIndex($index);
-
-        if ($encryptionName !== false && strtolower($encryptionName) !== 'none') {
+        if ($stat['encryption_method'] !== ZipArchive::EM_NONE) {
             $this->reject();
         }
     }
