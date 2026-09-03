@@ -4,6 +4,7 @@ use App\Http\Controllers\AssessmentAnswerController;
 use App\Http\Controllers\AssessmentController;
 use App\Http\Controllers\Auth\EntraAuthController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EvidenceController;
 use App\Http\Controllers\IsmsProjectController;
 use App\Http\Controllers\OrganizationController;
 use Illuminate\Support\Facades\Route;
@@ -35,6 +36,12 @@ Route::middleware(['auth', 'active-user'])->group(function (): void {
     Route::post('/organizations/{organization}/projects/{project}/assessment', [AssessmentController::class, 'start'])->name('assessments.start');
     Route::get('/organizations/{organization}/projects/{project}/assessment', [AssessmentController::class, 'show'])->name('assessments.show');
     Route::put('/organizations/{organization}/projects/{project}/assessment/questions/{question}', [AssessmentAnswerController::class, 'update'])->name('assessments.answers.update');
+
+    Route::post('/organizations/{organization}/projects/{project}/assessment/questions/{question}/evidence', [EvidenceController::class, 'store']);
+    Route::post('/organizations/{organization}/projects/{project}/evidence/{evidence}/questions/{question}', [EvidenceController::class, 'linkQuestion']);
+    Route::post('/organizations/{organization}/projects/{project}/findings/{finding}/evidence/{evidence}', [EvidenceController::class, 'linkFinding']);
+    Route::patch('/organizations/{organization}/projects/{project}/evidence/{evidence}/review', [EvidenceController::class, 'review']);
+    Route::get('/organizations/{organization}/projects/{project}/evidence/{evidence}/download', [EvidenceController::class, 'download']);
 
     Route::post('/logout', [EntraAuthController::class, 'logout'])->name('logout');
 });
