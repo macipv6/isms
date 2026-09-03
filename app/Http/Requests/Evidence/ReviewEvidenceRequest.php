@@ -14,9 +14,12 @@ class ReviewEvidenceRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        $organization = $this->route('organization'); $project = $this->route('project'); $evidence = $this->route('evidence');
+        $organization = $this->route('organization');
+        $project = $this->route('project');
+        $evidence = $this->route('evidence');
         abort_unless($organization instanceof Organization && $project instanceof IsmsProject && $evidence instanceof EvidenceFile, 404);
         abort_unless($organization->organization_type === 'customer' && $project->organization_id === $organization->id && $evidence->project_id === $project->id, 404);
+
         return Gate::allows('review', $evidence);
     }
 

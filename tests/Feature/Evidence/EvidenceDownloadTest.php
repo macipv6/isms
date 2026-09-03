@@ -58,6 +58,7 @@ class EvidenceDownloadTest extends TestCase
         if ($contents !== '') {
             Storage::disk('evidence')->put($evidence->storage_path, $contents);
         }
+
         return [$evidence, $actor];
     }
 }

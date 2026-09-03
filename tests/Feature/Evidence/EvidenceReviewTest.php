@@ -33,7 +33,13 @@ class EvidenceReviewTest extends TestCase
     public function test_rejection_requires_a_note_and_audit_failure_rolls_back_the_review(): void
     {
         [$project, $evidence, $actor] = $this->context();
-        $this->app->instance(AuditLogger::class, new class extends AuditLogger { public function record(string $eventType, ?User $actor, array $context = [], ?string $organizationId = null): \App\Models\AuditEvent { throw new RuntimeException('audit unavailable'); } });
+        $this->app->instance(AuditLogger::class, new class extends AuditLogger
+        {
+            public function record(string $eventType, ?User $actor, array $context = [], ?string $organizationId = null): \App\Models\AuditEvent
+            {
+                throw new RuntimeException('audit unavailable');
+            }
+        });
 
         try {
             app(EvidenceReviewService::class)->review($evidence, EvidenceReviewStatus::Rejected, 'Unleserlich', $actor);
@@ -50,6 +56,7 @@ class EvidenceReviewTest extends TestCase
         $organization = Organization::factory()->create(['organization_type' => 'customer', 'entra_tenant_id' => null]);
         $project = IsmsProject::factory()->for($organization)->create();
         $actor = User::factory()->for(Organization::factory()->create(['organization_type' => 'internal']))->create(['role' => UserRole::Consultant]);
+
         return [$project, EvidenceFile::factory()->for($project)->create(['uploaded_by' => $actor->id]), $actor];
     }
 }

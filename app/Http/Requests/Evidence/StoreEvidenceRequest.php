@@ -21,7 +21,10 @@ class StoreEvidenceRequest extends FormRequest
         return Gate::allows('upload', [EvidenceFile::class, $project]);
     }
 
-    public function rules(): array { return ['file' => ['required', 'file']]; }
+    public function rules(): array
+    {
+        return ['file' => ['required', 'file']];
+    }
 
     /** @return array{Organization, IsmsProject, AssessmentQuestion} */
     private function nestedQuestion(): array
@@ -30,6 +33,7 @@ class StoreEvidenceRequest extends FormRequest
         $project = $this->route('project');
         $question = $this->route('question');
         abort_unless($organization instanceof Organization && $project instanceof IsmsProject && $question instanceof AssessmentQuestion, 404);
+
         return [$organization, $project, $question];
     }
 }

@@ -83,8 +83,23 @@ class EvidenceAuthorizationTest extends TestCase
         return User::factory()->for(Organization::factory()->create(['organization_type' => 'internal']))->create(['role' => $role]);
     }
 
-    private function questionUrl(Organization $organization, IsmsProject $project, object $question): string { return '/organizations/'.$organization->id.'/projects/'.$project->id.'/assessment/questions/'.$question->id.'/evidence'; }
-    private function reviewUrl(Organization $organization, IsmsProject $project, EvidenceFile $evidence): string { return '/organizations/'.$organization->id.'/projects/'.$project->id.'/evidence/'.$evidence->id.'/review'; }
-    private function downloadUrl(Organization $organization, IsmsProject $project, EvidenceFile $evidence): string { return '/organizations/'.$organization->id.'/projects/'.$project->id.'/evidence/'.$evidence->id.'/download'; }
-    private function findingUrl(Organization $organization, IsmsProject $project, Finding $finding, EvidenceFile $evidence): string { return '/organizations/'.$organization->id.'/projects/'.$project->id.'/findings/'.$finding->id.'/evidence/'.$evidence->id; }
+    private function questionUrl(Organization $organization, IsmsProject $project, object $question): string
+    {
+        return '/organizations/'.$organization->id.'/projects/'.$project->id.'/assessment/questions/'.$question->id.'/evidence';
+    }
+
+    private function reviewUrl(Organization $organization, IsmsProject $project, EvidenceFile $evidence): string
+    {
+        return '/organizations/'.$organization->id.'/projects/'.$project->id.'/evidence/'.$evidence->id.'/review';
+    }
+
+    private function downloadUrl(Organization $organization, IsmsProject $project, EvidenceFile $evidence): string
+    {
+        return '/organizations/'.$organization->id.'/projects/'.$project->id.'/evidence/'.$evidence->id.'/download';
+    }
+
+    private function findingUrl(Organization $organization, IsmsProject $project, Finding $finding, EvidenceFile $evidence): string
+    {
+        return '/organizations/'.$organization->id.'/projects/'.$project->id.'/findings/'.$finding->id.'/evidence/'.$evidence->id;
+    }
 }

@@ -15,9 +15,20 @@ class EvidenceFilePolicy
         return $this->canRead($user, $this->project($resource));
     }
 
-    public function upload(User $user, IsmsProject $project): bool { return $this->canWrite($user, $project); }
-    public function link(User $user, IsmsProject $project): bool { return $this->canWrite($user, $project); }
-    public function review(User $user, EvidenceFile|IsmsProject $resource): bool { return $this->canWrite($user, $this->project($resource)); }
+    public function upload(User $user, IsmsProject $project): bool
+    {
+        return $this->canWrite($user, $project);
+    }
+
+    public function link(User $user, IsmsProject $project): bool
+    {
+        return $this->canWrite($user, $project);
+    }
+
+    public function review(User $user, EvidenceFile|IsmsProject $resource): bool
+    {
+        return $this->canWrite($user, $this->project($resource));
+    }
 
     private function canRead(User $user, IsmsProject $project): bool
     {

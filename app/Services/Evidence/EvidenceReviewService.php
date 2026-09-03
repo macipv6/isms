@@ -25,11 +25,20 @@ class EvidenceReviewService
 
         return DB::transaction(function () use ($evidence, $status, $note, $actor): EvidenceFile {
             $this->links->assertWritableProject($evidence->project, $actor);
-            $locked = EvidenceFile::query()->whereKey($evidence->id)->where('project_id', $evidence->project_id)->lockForUpdate()->firstOrFail();
-            if ($locked->status === $status) return $locked;
+            $locked = EvidenceFile::query()
+                ->whereKey($evidence->id)
+                ->where('project_id', $evidence->project_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($locked->status === $status) {
+                return $locked;
+            }
+
             $old = $locked->status;
             $locked->update(['status' => $status, 'review_note' => $note, 'reviewed_by' => $actor->id, 'reviewed_at' => now()]);
             $this->audit->record('evidence.reviewed', $actor, ['project_id' => $locked->project_id, 'evidence_id' => $locked->id, 'old_status' => $old->value, 'new_status' => $status->value]);
+
             return $locked;
         });
     }
