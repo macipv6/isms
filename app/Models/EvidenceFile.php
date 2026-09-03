@@ -81,6 +81,7 @@ class EvidenceFile extends Model
     public function questions(): BelongsToMany
     {
         return $this->belongsToMany(AssessmentQuestion::class, 'evidence_question_links')
+            ->using(EvidenceQuestionLink::class)
             ->withPivot('project_id', 'project_assessment_id')
             ->withTimestamps();
     }
@@ -91,6 +92,7 @@ class EvidenceFile extends Model
     public function findings(): BelongsToMany
     {
         return $this->belongsToMany(Finding::class, 'evidence_finding_links')
+            ->using(EvidenceFindingLink::class)
             ->withPivot('project_id', 'project_assessment_id')
             ->withTimestamps();
     }

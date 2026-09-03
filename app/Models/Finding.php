@@ -117,6 +117,7 @@ class Finding extends Model
     public function evidenceFiles(): BelongsToMany
     {
         return $this->belongsToMany(EvidenceFile::class, 'evidence_finding_links')
+            ->using(EvidenceFindingLink::class)
             ->withPivot('project_id', 'project_assessment_id')
             ->withTimestamps();
     }

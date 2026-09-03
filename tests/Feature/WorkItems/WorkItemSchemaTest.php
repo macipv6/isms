@@ -168,12 +168,12 @@ class WorkItemSchemaTest extends TestCase
     {
         $evidence = EvidenceFile::factory()->create();
         $reviewer = User::factory()->create();
-        $reviewedAt = now()->addMinute();
+        $reviewedAt = now('UTC')->addMinute()->startOfSecond();
 
         DB::table('evidence_files')->where('id', $evidence->id)->update([
             'status' => EvidenceReviewStatus::Verified->value,
             'reviewed_by' => $reviewer->id,
-            'reviewed_at' => $reviewedAt,
+            'reviewed_at' => DB::raw("TIMESTAMPTZ '".$reviewedAt->format('Y-m-d H:i:sP')."'"),
         ]);
 
         $updated = $evidence->fresh();
@@ -181,7 +181,10 @@ class WorkItemSchemaTest extends TestCase
         $this->assertNotNull($updated);
         $this->assertSame(EvidenceReviewStatus::Verified, $updated->status);
         $this->assertSame($reviewer->id, $updated->reviewed_by);
-        $this->assertSame($reviewedAt->getTimestamp(), $updated->reviewed_at?->getTimestamp());
+        $this->assertSame(
+            $reviewedAt->format('Y-m-d H:i:s'),
+            $updated->reviewed_at?->utc()->format('Y-m-d H:i:s'),
+        );
     }
 
     public function test_finding_cannot_reference_an_assessment_from_another_project(): void

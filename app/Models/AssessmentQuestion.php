@@ -89,6 +89,7 @@ class AssessmentQuestion extends Model
     public function evidenceFiles(): BelongsToMany
     {
         return $this->belongsToMany(EvidenceFile::class, 'evidence_question_links')
+            ->using(EvidenceQuestionLink::class)
             ->withPivot('project_id', 'project_assessment_id')
             ->withTimestamps();
     }
