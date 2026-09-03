@@ -4,6 +4,7 @@ namespace Tests\Feature\Evidence;
 
 use App\Enums\ProjectStatus;
 use App\Enums\UserRole;
+use App\Models\AssessmentQuestion;
 use App\Models\EvidenceFile;
 use App\Models\Finding;
 use App\Models\IsmsProject;
@@ -12,6 +13,7 @@ use App\Models\User;
 use App\Services\Assessment\AssessmentStarter;
 use Database\Seeders\AssessmentCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class EvidenceAuthorizationTest extends TestCase
@@ -63,7 +65,7 @@ class EvidenceAuthorizationTest extends TestCase
         $this->assertDatabaseCount('evidence_finding_links', 0);
     }
 
-    /** @return array{Organization, IsmsProject, \App\Models\AssessmentQuestion, EvidenceFile} */
+    /** @return array{Organization, IsmsProject, AssessmentQuestion, EvidenceFile} */
     private function context(array $projectAttributes = []): array
     {
         $this->seed(AssessmentCatalogSeeder::class);
@@ -72,8 +74,8 @@ class EvidenceAuthorizationTest extends TestCase
         $actor = $this->internal(UserRole::Consultant);
         $question = app(AssessmentStarter::class)->start($project, $actor)->questions()->firstOrFail();
         $evidence = EvidenceFile::factory()->for($project)->create(['storage_path' => 'projects/'.$project->id.'/history.txt', 'size_bytes' => 7, 'sha256' => hash('sha256', 'history')]);
-        \Illuminate\Support\Facades\Storage::fake('evidence');
-        \Illuminate\Support\Facades\Storage::disk('evidence')->put($evidence->storage_path, 'history');
+        Storage::fake('evidence');
+        Storage::disk('evidence')->put($evidence->storage_path, 'history');
 
         return [$organization, $project, $question, $evidence];
     }

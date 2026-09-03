@@ -4,6 +4,7 @@ namespace Tests\Feature\Evidence;
 
 use App\Enums\EvidenceReviewStatus;
 use App\Enums\UserRole;
+use App\Models\AuditEvent;
 use App\Models\EvidenceFile;
 use App\Models\IsmsProject;
 use App\Models\Organization;
@@ -35,7 +36,12 @@ class EvidenceReviewTest extends TestCase
         [$project, $evidence, $actor] = $this->context();
         $this->app->instance(AuditLogger::class, new class extends AuditLogger
         {
-            public function record(string $eventType, ?User $actor, array $context = [], ?string $organizationId = null): \App\Models\AuditEvent
+            public function record(
+                string $eventType,
+                ?User $actor,
+                array $context = [],
+                ?string $organizationId = null,
+            ): AuditEvent
             {
                 throw new RuntimeException('audit unavailable');
             }
