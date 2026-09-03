@@ -40,8 +40,7 @@ class EvidenceReviewTest extends TestCase
                 ?User $actor,
                 array $context = [],
                 ?string $organizationId = null,
-            ): AuditEvent
-            {
+            ): AuditEvent {
                 throw new RuntimeException('audit unavailable');
             }
         });
