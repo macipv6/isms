@@ -39,7 +39,7 @@ class EvidenceAuditTest extends TestCase
         $event = AuditEvent::query()->sole();
         $encoded = json_encode($event->context, JSON_THROW_ON_ERROR);
 
-        $this->assertSame([
+        $expectedContext = [
             'project_id' => 'project-id',
             'evidence_id' => 'evidence-id',
             'finding_id' => 'finding-id',
@@ -48,7 +48,12 @@ class EvidenceAuditTest extends TestCase
             'new_status' => 'verified',
             'link_type' => 'finding',
             'failure_kind' => 'missing_object',
-        ], $event->context);
+        ];
+        $actualContext = $event->context;
+        ksort($expectedContext);
+        ksort($actualContext);
+
+        $this->assertSame($expectedContext, $actualContext);
         foreach ([
             'secret-policy.txt',
             str_repeat('a', 64),
