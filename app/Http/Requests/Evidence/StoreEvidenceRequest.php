@@ -21,6 +21,9 @@ class StoreEvidenceRequest extends FormRequest
         return Gate::allows('upload', [EvidenceFile::class, $project]);
     }
 
+    /**
+     * @return array<string, list<mixed>>
+     */
     public function rules(): array
     {
         return ['file' => ['required', 'file']];

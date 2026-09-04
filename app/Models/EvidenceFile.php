@@ -10,6 +10,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
+/**
+ * @property EvidenceReviewStatus $status
+ */
 class EvidenceFile extends Model
 {
     /** @use HasFactory<EvidenceFileFactory> */

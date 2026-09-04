@@ -23,6 +23,9 @@ class ReviewEvidenceRequest extends FormRequest
         return Gate::allows('review', $evidence);
     }
 
+    /**
+     * @return array<string, list<mixed>>
+     */
     public function rules(): array
     {
         return [
