@@ -34,6 +34,8 @@ class FindingAuditTest extends TestCase
         foreach (['finding.proposed', 'finding.updated', 'finding.accepted', 'finding.closed'] as $eventType) {
             $this->assertSame(1, AuditEvent::query()->where('event_type', $eventType)->count());
         }
+        $this->assertSame([$customer->id], AuditEvent::query()->distinct()->pluck('organization_id')->all());
+        $this->assertNotSame($actor->organization_id, $customer->id);
         $updated = AuditEvent::query()->where('event_type', 'finding.updated')->sole();
         $this->assertSame(['title'], $updated->context['changed_fields']);
         $encoded = AuditEvent::query()->get()->toJson();
