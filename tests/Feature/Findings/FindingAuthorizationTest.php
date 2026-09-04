@@ -3,9 +3,11 @@
 namespace Tests\Feature\Findings;
 
 use App\Enums\FindingStatus;
+use App\Enums\MeasureStatus;
 use App\Enums\ProjectStatus;
 use App\Enums\UserRole;
 use App\Models\Finding;
+use App\Models\Measure;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -57,6 +59,23 @@ class FindingAuthorizationTest extends TestCase
             ->post($this->findingStoreUrl($inactiveOrganization, $inactiveProject, $inactiveQuestion), $this->findingPayload())
             ->assertForbidden();
         $this->assertDatabaseCount('findings', 0);
+    }
+
+    public function test_authorized_close_endpoint_closes_an_accepted_finding_with_terminal_measures(): void
+    {
+        [$organization, $project, $assessment, $question, $actor] = $this->findingContext();
+        $finding = Finding::factory()->for($project)->create([
+            'status' => FindingStatus::Accepted,
+            'proposed_by' => $actor->id,
+        ]);
+        Measure::factory()->for($project)->for($finding)->create(['status' => MeasureStatus::Completed]);
+
+        $this->actingAs($actor)
+            ->patch($this->findingUrl($organization, $project, $finding, '/close'))
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Feststellung geschlossen.');
+
+        $this->assertSame(FindingStatus::Closed, $finding->fresh()->status);
     }
 
     public function test_nested_substitution_returns_404_before_authorization_or_write(): void
