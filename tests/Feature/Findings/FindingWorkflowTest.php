@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Findings;
 
+use App\Enums\AssessmentStatus;
 use App\Enums\ComplianceStatus;
 use App\Enums\FindingSeverity;
 use App\Enums\FindingStatus;
@@ -63,7 +64,7 @@ class FindingWorkflowTest extends TestCase
         $this->assertProposalRejected($project, $question, $actor);
 
         [$customer, $project, $assessment, $question, $actor] = $this->findingContext();
-        $assessment->update(['status' => \App\Enums\AssessmentStatus::Completed]);
+        $assessment->update(['status' => AssessmentStatus::Completed]);
         $this->assertProposalRejected($project, $question, $actor);
 
         [$customer, $project, $assessment, $question, $actor] = $this->findingContext();

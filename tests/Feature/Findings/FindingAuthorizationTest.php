@@ -8,6 +8,7 @@ use App\Enums\ProjectStatus;
 use App\Enums\UserRole;
 use App\Models\Finding;
 use App\Models\Measure;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -43,7 +44,7 @@ class FindingAuthorizationTest extends TestCase
         $url = $this->findingStoreUrl($organization, $project, $question);
 
         $this->post($url, $this->findingPayload())->assertRedirect('/login');
-        $customerUser = \App\Models\User::factory()->for($organization)->create(['role' => UserRole::Admin]);
+        $customerUser = User::factory()->for($organization)->create(['role' => UserRole::Admin]);
         $this->actingAs($customerUser)->post($url, $this->findingPayload())->assertForbidden();
 
         foreach ([ProjectStatus::Completed, ProjectStatus::Archived] as $status) {
