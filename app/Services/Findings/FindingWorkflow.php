@@ -169,7 +169,10 @@ class FindingWorkflow
         });
     }
 
-    /** @return array{title: string, description: string, severity: string} */
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{title: string, description: string, severity: string}
+     */
     private function validateContent(array $data): array
     {
         $validated = Validator::make($data, [

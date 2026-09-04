@@ -12,6 +12,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property FindingSeverity $severity
+ * @property FindingStatus $status
+ */
 class Finding extends Model
 {
     /** @use HasFactory<FindingFactory> */
