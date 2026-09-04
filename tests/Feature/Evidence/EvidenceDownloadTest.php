@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\Evidence\EvidenceDownloadService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class EvidenceDownloadTest extends TestCase
@@ -26,7 +27,7 @@ class EvidenceDownloadTest extends TestCase
         $this->assertSame('nosniff', $response->headers->get('x-content-type-options'));
     }
 
-    /** @dataProvider corruptObjects */
+    #[DataProvider('corruptObjects')]
     public function test_corrupt_or_missing_object_raises_generic_integrity_failure(string $contents, int $size, string $hash): void
     {
         [$evidence] = $this->evidence('private-path.txt', $contents, $size, $hash);
@@ -39,6 +40,9 @@ class EvidenceDownloadTest extends TestCase
         $this->assertDatabaseHas('audit_events', ['event_type' => 'evidence.integrity_failed', 'context->evidence_id' => $evidence->id]);
     }
 
+    /**
+     * @return array<string, array{string, int, string}>
+     */
     public static function corruptObjects(): array
     {
         return [

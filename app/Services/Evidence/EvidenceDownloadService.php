@@ -6,7 +6,6 @@ use App\Exceptions\EvidenceIntegrityException;
 use App\Models\EvidenceFile;
 use App\Services\Audit\AuditLogger;
 use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\HeaderUtils;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
@@ -76,7 +75,7 @@ class EvidenceDownloadService
             }
         }, 200, [
             'Content-Type' => $evidence->mime_type,
-            'Content-Disposition' => HeaderUtils::makeDisposition(HeaderUtils::DISPOSITION_ATTACHMENT, $filename),
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
             'X-Content-Type-Options' => 'nosniff',
         ]);
     }
