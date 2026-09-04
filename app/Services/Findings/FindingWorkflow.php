@@ -61,7 +61,7 @@ class FindingWorkflow
                 'project_id' => $lockedProject->id,
                 'finding_id' => $finding->id,
                 'new_status' => FindingStatus::Proposed->value,
-            ]);
+            ], $lockedProject->organization_id);
 
             return $finding;
         });
@@ -93,7 +93,7 @@ class FindingWorkflow
                 'project_id' => $project->id,
                 'finding_id' => $locked->id,
                 'changed_fields' => $changedFields,
-            ]);
+            ], $project->organization_id);
 
             return $locked;
         });
@@ -130,7 +130,7 @@ class FindingWorkflow
                 'finding_id' => $locked->id,
                 'old_status' => $oldStatus->value,
                 'new_status' => $decision->value,
-            ]);
+            ], $project->organization_id);
 
             return $locked;
         });
@@ -163,7 +163,7 @@ class FindingWorkflow
                 'finding_id' => $locked->id,
                 'old_status' => $oldStatus->value,
                 'new_status' => FindingStatus::Closed->value,
-            ]);
+            ], $project->organization_id);
 
             return $locked;
         });
