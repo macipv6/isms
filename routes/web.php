@@ -5,6 +5,7 @@ use App\Http\Controllers\AssessmentController;
 use App\Http\Controllers\Auth\EntraAuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EvidenceController;
+use App\Http\Controllers\FindingController;
 use App\Http\Controllers\IsmsProjectController;
 use App\Http\Controllers\OrganizationController;
 use Illuminate\Support\Facades\Route;
@@ -42,6 +43,11 @@ Route::middleware(['auth', 'active-user'])->group(function (): void {
     Route::post('/organizations/{organization}/projects/{project}/findings/{finding}/evidence/{evidence}', [EvidenceController::class, 'linkFinding']);
     Route::patch('/organizations/{organization}/projects/{project}/evidence/{evidence}/review', [EvidenceController::class, 'review']);
     Route::get('/organizations/{organization}/projects/{project}/evidence/{evidence}/download', [EvidenceController::class, 'download']);
+
+    Route::post('/organizations/{organization}/projects/{project}/assessment/questions/{question}/findings', [FindingController::class, 'store']);
+    Route::put('/organizations/{organization}/projects/{project}/findings/{finding}', [FindingController::class, 'update']);
+    Route::patch('/organizations/{organization}/projects/{project}/findings/{finding}/decision', [FindingController::class, 'decide']);
+    Route::patch('/organizations/{organization}/projects/{project}/findings/{finding}/close', [FindingController::class, 'close']);
 
     Route::post('/logout', [EntraAuthController::class, 'logout'])->name('logout');
 });
