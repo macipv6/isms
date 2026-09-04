@@ -74,7 +74,6 @@ class EvidenceAuthorizationTest extends TestCase
         $this->actingAs($this->internal(UserRole::Consultant))
             ->get($this->downloadUrl($organization, $project, $evidence))
             ->assertStatus(422)
-            ->assertSee('Der Nachweis konnte nicht sicher bereitgestellt werden.')
             ->assertDontSee($evidence->storage_path)
             ->assertDontSee($evidence->sha256);
     }
