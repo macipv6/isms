@@ -6,7 +6,6 @@ use App\Enums\ComplianceStatus;
 use App\Enums\FindingSeverity;
 use App\Enums\FindingStatus;
 use App\Enums\MeasureStatus;
-use App\Models\Finding;
 use App\Models\Measure;
 use App\Models\ProjectAnswer;
 use App\Services\Findings\FindingWorkflow;
@@ -61,6 +60,10 @@ class FindingWorkflowTest extends TestCase
 
         [$customer, $project, $assessment, $question, $actor] = $this->findingContext();
         $question->update(['is_active' => false]);
+        $this->assertProposalRejected($project, $question, $actor);
+
+        [$customer, $project, $assessment, $question, $actor] = $this->findingContext();
+        $assessment->update(['status' => \App\Enums\AssessmentStatus::Completed]);
         $this->assertProposalRejected($project, $question, $actor);
 
         [$customer, $project, $assessment, $question, $actor] = $this->findingContext();

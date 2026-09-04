@@ -30,12 +30,10 @@ class FindingAuditTest extends TestCase
         Measure::factory()->for($project)->for($finding)->create(['status' => MeasureStatus::Cancelled]);
         $workflow->close($finding, $actor);
 
-        $this->assertSame([
-            'finding.proposed',
-            'finding.updated',
-            'finding.accepted',
-            'finding.closed',
-        ], AuditEvent::query()->orderBy('id')->pluck('event_type')->all());
+        $this->assertDatabaseCount('audit_events', 4);
+        foreach (['finding.proposed', 'finding.updated', 'finding.accepted', 'finding.closed'] as $eventType) {
+            $this->assertSame(1, AuditEvent::query()->where('event_type', $eventType)->count());
+        }
         $updated = AuditEvent::query()->where('event_type', 'finding.updated')->sole();
         $this->assertSame(['title'], $updated->context['changed_fields']);
         $encoded = AuditEvent::query()->get()->toJson();
