@@ -38,16 +38,14 @@ class EvidenceAuthorizationTest extends TestCase
             $actor = $this->internal(UserRole::Consultant);
 
             $this->actingAs($actor)->get($this->downloadUrl($organization, $project, $evidence))->assertOk();
-            $this->actingAs($actor)->patch($this->reviewUrl($organization, $project, $evidence), ['status' => 'verified'])->assertForbidden();
-            $this->actingAs($actor)->post($this->questionUrl($organization, $project, $question), [])->assertForbidden();
-            $this->assertDatabaseMissing('audit_events', ['event_type' => 'evidence.reviewed']);
-            $this->assertDatabaseCount('evidence_question_links', 0);
-            $this->assertCount(1, Storage::disk('evidence')->allFiles());
+            $this->assertWritesAreFrozen($actor, $organization, $project, $question, $evidence);
         }
 
         [$organization, $project, $question, $evidence] = $this->context();
         $organization->update(['is_active' => false]);
-        $this->actingAs($this->internal(UserRole::Admin))->get($this->downloadUrl($organization, $project, $evidence))->assertOk();
+        $actor = $this->internal(UserRole::Admin);
+        $this->actingAs($actor)->get($this->downloadUrl($organization, $project, $evidence))->assertOk();
+        $this->assertWritesAreFrozen($actor, $organization, $project, $question, $evidence);
     }
 
     public function test_nested_parent_and_resource_substitutions_return_404_before_authorization_or_writes(): void
@@ -60,9 +58,25 @@ class EvidenceAuthorizationTest extends TestCase
         $this->actingAs($actor)->post($this->questionUrl($foreignOrganization, $project, $question), [])->assertNotFound();
         $this->actingAs($actor)->post($this->questionUrl($organization, $project, $foreignQuestion), [])->assertNotFound();
         $this->actingAs($actor)->get($this->downloadUrl($organization, $project, $foreignEvidence))->assertNotFound();
+        $this->actingAs($actor)->post($this->evidenceQuestionUrl($organization, $project, $foreignEvidence, $question))->assertNotFound();
+        $this->actingAs($actor)->post($this->evidenceQuestionUrl($organization, $project, $evidence, $foreignQuestion))->assertNotFound();
         $this->actingAs($actor)->post($this->findingUrl($organization, $project, $foreignFinding, $evidence), [])->assertNotFound();
+        $this->actingAs($actor)->post($this->findingUrl($organization, $project, $foreignFinding, $foreignEvidence))->assertNotFound();
         $this->assertDatabaseCount('evidence_question_links', 0);
         $this->assertDatabaseCount('evidence_finding_links', 0);
+    }
+
+    public function test_http_integrity_failure_is_generic_and_does_not_leak_evidence_metadata(): void
+    {
+        [$organization, $project, $question, $evidence] = $this->context();
+        Storage::disk('evidence')->delete($evidence->storage_path);
+
+        $this->actingAs($this->internal(UserRole::Consultant))
+            ->get($this->downloadUrl($organization, $project, $evidence))
+            ->assertStatus(422)
+            ->assertSee('Der Nachweis konnte nicht sicher bereitgestellt werden.')
+            ->assertDontSee($evidence->storage_path)
+            ->assertDontSee($evidence->sha256);
     }
 
     /** @return array{Organization, IsmsProject, AssessmentQuestion, EvidenceFile} */
@@ -85,6 +99,22 @@ class EvidenceAuthorizationTest extends TestCase
         return User::factory()->for(Organization::factory()->create(['organization_type' => 'internal']))->create(['role' => $role]);
     }
 
+    private function assertWritesAreFrozen(User $actor, Organization $organization, IsmsProject $project, AssessmentQuestion $question, EvidenceFile $evidence): void
+    {
+        $finding = Finding::factory()->for($project)->create();
+
+        $this->actingAs($actor)->post($this->questionUrl($organization, $project, $question))->assertForbidden();
+        $this->actingAs($actor)->patch($this->reviewUrl($organization, $project, $evidence), ['status' => 'verified'])->assertForbidden();
+        $this->actingAs($actor)->post($this->evidenceQuestionUrl($organization, $project, $evidence, $question))->assertForbidden();
+        $this->actingAs($actor)->post($this->findingUrl($organization, $project, $finding, $evidence))->assertForbidden();
+        $this->assertDatabaseCount('evidence_question_links', 0);
+        $this->assertDatabaseCount('evidence_finding_links', 0);
+        $this->assertDatabaseMissing('audit_events', ['event_type' => 'evidence.reviewed']);
+        $this->assertDatabaseMissing('audit_events', ['event_type' => 'evidence.linked']);
+        $this->assertDatabaseMissing('audit_events', ['event_type' => 'evidence.uploaded']);
+        $this->assertCount(1, Storage::disk('evidence')->allFiles());
+    }
+
     private function questionUrl(Organization $organization, IsmsProject $project, object $question): string
     {
         return '/organizations/'.$organization->id.'/projects/'.$project->id.'/assessment/questions/'.$question->id.'/evidence';
@@ -98,6 +128,11 @@ class EvidenceAuthorizationTest extends TestCase
     private function downloadUrl(Organization $organization, IsmsProject $project, EvidenceFile $evidence): string
     {
         return '/organizations/'.$organization->id.'/projects/'.$project->id.'/evidence/'.$evidence->id.'/download';
+    }
+
+    private function evidenceQuestionUrl(Organization $organization, IsmsProject $project, EvidenceFile $evidence, AssessmentQuestion $question): string
+    {
+        return '/organizations/'.$organization->id.'/projects/'.$project->id.'/evidence/'.$evidence->id.'/questions/'.$question->id;
     }
 
     private function findingUrl(Organization $organization, IsmsProject $project, Finding $finding, EvidenceFile $evidence): string

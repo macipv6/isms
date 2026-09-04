@@ -4,14 +4,19 @@ namespace Tests\Feature\Evidence;
 
 use App\Enums\UserRole;
 use App\Exceptions\EvidenceIntegrityException;
+use App\Models\AuditEvent;
 use App\Models\EvidenceFile;
 use App\Models\IsmsProject;
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\Audit\AuditLogger;
 use App\Services\Evidence\EvidenceDownloadService;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
+use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
+use RuntimeException;
 use Tests\TestCase;
 
 class EvidenceDownloadTest extends TestCase
@@ -27,6 +32,19 @@ class EvidenceDownloadTest extends TestCase
         $this->assertSame('nosniff', $response->headers->get('x-content-type-options'));
     }
 
+    public function test_verified_temporary_bytes_are_streamed_when_storage_changes_after_verification(): void
+    {
+        [$evidence] = $this->evidence('policy.txt', 'approved policy');
+        $response = app(EvidenceDownloadService::class)->download($evidence);
+        Storage::disk('evidence')->delete($evidence->storage_path);
+
+        ob_start();
+        $response->sendContent();
+        $contents = ob_get_clean();
+
+        $this->assertSame('approved policy', $contents);
+    }
+
     #[DataProvider('corruptObjects')]
     public function test_corrupt_or_missing_object_raises_generic_integrity_failure(string $contents, int $size, string $hash): void
     {
@@ -38,6 +56,32 @@ class EvidenceDownloadTest extends TestCase
         }
 
         $this->assertDatabaseHas('audit_events', ['event_type' => 'evidence.integrity_failed', 'context->evidence_id' => $evidence->id]);
+    }
+
+    public function test_oversized_object_is_rejected_before_it_can_be_streamed(): void
+    {
+        [$evidence] = $this->evidence('oversized.txt', str_repeat('x', 8193), 1, hash('sha256', 'x'));
+
+        $this->expectException(EvidenceIntegrityException::class);
+        app(EvidenceDownloadService::class)->download($evidence);
+    }
+
+    public function test_integrity_audit_failure_is_reported_but_the_client_exception_stays_generic(): void
+    {
+        [$evidence] = $this->evidence('private-path.txt', 'x', 1, hash('sha256', 'y'));
+        $auditFailure = new RuntimeException('intentional integrity audit failure');
+        $this->app->instance(AuditLogger::class, $this->failingAuditLogger($auditFailure));
+        $handler = Mockery::mock(ExceptionHandler::class);
+        $handler->shouldReceive('report')->once()->with($auditFailure);
+        $this->app->instance(ExceptionHandler::class, $handler);
+
+        try {
+            app(EvidenceDownloadService::class)->download($evidence);
+            $this->fail('The integrity failure must stop the download.');
+        } catch (EvidenceIntegrityException $exception) {
+            $this->assertSame('Der Nachweis konnte nicht sicher bereitgestellt werden.', $exception->getMessage());
+            $this->assertSame($auditFailure, $exception->getPrevious());
+        }
     }
 
     /**
@@ -64,5 +108,22 @@ class EvidenceDownloadTest extends TestCase
         }
 
         return [$evidence, $actor];
+    }
+
+    private function failingAuditLogger(RuntimeException $failure): AuditLogger
+    {
+        return new class($failure) extends AuditLogger
+        {
+            public function __construct(private RuntimeException $failure) {}
+
+            public function record(
+                string $eventType,
+                ?User $actor,
+                array $context = [],
+                ?string $organizationId = null,
+            ): AuditEvent {
+                throw $this->failure;
+            }
+        };
     }
 }

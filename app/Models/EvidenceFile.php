@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 /**
  * @property EvidenceReviewStatus $status
+ * @property int $size_bytes
  */
 class EvidenceFile extends Model
 {

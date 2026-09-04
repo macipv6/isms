@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use App\Services\Evidence\EvidenceReviewService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -39,7 +40,22 @@ class EvidenceReviewTest extends TestCase
         try {
             app(EvidenceReviewService::class)->review($evidence, EvidenceReviewStatus::Rejected, 'Unleserlich', $actor);
             $this->fail('The audit exception must bubble out of the transaction.');
-        } catch (RuntimeException) {
+        } catch (RuntimeException $exception) {
+            $this->assertSame('audit unavailable', $exception->getMessage());
+        }
+
+        $this->assertSame(EvidenceReviewStatus::PendingReview, $evidence->fresh()->status);
+    }
+
+    public function test_rejection_without_review_note_is_invalid(): void
+    {
+        [$project, $evidence, $actor] = $this->context();
+
+        try {
+            app(EvidenceReviewService::class)->review($evidence, EvidenceReviewStatus::Rejected, null, $actor);
+            $this->fail('A rejection without a review note must be invalid.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('review_note', $exception->errors());
         }
 
         $this->assertSame(EvidenceReviewStatus::PendingReview, $evidence->fresh()->status);
