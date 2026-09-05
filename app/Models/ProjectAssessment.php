@@ -71,4 +71,12 @@ class ProjectAssessment extends Model
     {
         return $this->hasMany(ProjectAnswer::class, 'project_assessment_id');
     }
+
+    /**
+     * @return HasMany<Finding, $this>
+     */
+    public function findings(): HasMany
+    {
+        return $this->hasMany(Finding::class, 'project_assessment_id');
+    }
 }
