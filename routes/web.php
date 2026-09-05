@@ -7,6 +7,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EvidenceController;
 use App\Http\Controllers\FindingController;
 use App\Http\Controllers\IsmsProjectController;
+use App\Http\Controllers\MeasureController;
 use App\Http\Controllers\OrganizationController;
 use Illuminate\Support\Facades\Route;
 
@@ -48,6 +49,10 @@ Route::middleware(['auth', 'active-user'])->group(function (): void {
     Route::put('/organizations/{organization}/projects/{project}/findings/{finding}', [FindingController::class, 'update']);
     Route::patch('/organizations/{organization}/projects/{project}/findings/{finding}/decision', [FindingController::class, 'decide']);
     Route::patch('/organizations/{organization}/projects/{project}/findings/{finding}/close', [FindingController::class, 'close']);
+
+    Route::post('/organizations/{organization}/projects/{project}/findings/{finding}/measures', [MeasureController::class, 'store']);
+    Route::put('/organizations/{organization}/projects/{project}/measures/{measure}', [MeasureController::class, 'update']);
+    Route::patch('/organizations/{organization}/projects/{project}/measures/{measure}/status', [MeasureController::class, 'transition']);
 
     Route::post('/logout', [EntraAuthController::class, 'logout'])->name('logout');
 });
