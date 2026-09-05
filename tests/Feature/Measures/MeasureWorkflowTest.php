@@ -5,7 +5,6 @@ namespace Tests\Feature\Measures;
 use App\Enums\FindingStatus;
 use App\Enums\MeasurePriority;
 use App\Enums\MeasureStatus;
-use App\Models\Finding;
 use App\Models\IsmsProject;
 use App\Models\Measure;
 use App\Services\Measures\MeasureWorkflow;
