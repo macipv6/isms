@@ -27,9 +27,23 @@ class EvidenceDownloadService
                 throw new EvidenceIntegrityException;
             }
 
-            $source = Storage::disk('evidence')->readStream($evidence->storage_path);
+            $disk = Storage::disk('evidence');
+
+            try {
+                $source = $disk->readStream($evidence->storage_path);
+            } catch (Throwable $exception) {
+                if (! $disk->exists($evidence->storage_path)) {
+                    $failureKind = 'missing_object';
+                }
+
+                throw $exception;
+            }
+
             if (! is_resource($source)) {
-                $failureKind = 'missing_object';
+                if (! $disk->exists($evidence->storage_path)) {
+                    $failureKind = 'missing_object';
+                }
+
                 throw new EvidenceIntegrityException;
             }
 
