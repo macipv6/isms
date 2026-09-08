@@ -50,7 +50,7 @@ class EvidenceLinkService
                     'project_id' => $lockedProject->id,
                     'evidence_id' => $lockedEvidence->id,
                     'link_type' => 'question',
-                ]);
+                ], $lockedProject->organization_id);
             }
 
             return $lockedEvidence;
@@ -102,7 +102,7 @@ class EvidenceLinkService
                     'evidence_id' => $lockedEvidence->id,
                     'finding_id' => $lockedFinding->id,
                     'link_type' => 'finding',
-                ]);
+                ], $lockedProject->organization_id);
             }
 
             return $lockedEvidence;

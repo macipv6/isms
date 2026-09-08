@@ -89,7 +89,7 @@ class EvidenceUploadService
                 $this->auditLogger->record('evidence.uploaded', $actor, [
                     'project_id' => $project->id,
                     'evidence_id' => $evidence->id,
-                ]);
+                ], $project->organization_id);
 
                 return $evidence;
             });

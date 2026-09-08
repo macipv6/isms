@@ -57,6 +57,10 @@ const statusLabels: Record<MeasureStatus, string> = {
     in_progress: 'In Bearbeitung',
     blocked: 'Blockiert',
     completed: 'Abgeschlossen',
+    cancelled: 'Abgebrochen',
+};
+const transitionLabels: Record<MeasureStatus, string> = {
+    ...statusLabels,
     cancelled: 'Abbrechen',
 };
 const priorityLabels: Record<MeasurePriority, string> = {
@@ -298,7 +302,7 @@ function transition(measure: QuestionMeasure, status: MeasureStatus): void {
                             class="rounded-lg bg-slate-700 px-3 py-2 text-sm disabled:opacity-50"
                             @click="transition(measure, status)"
                         >
-                            {{ statusLabels[status] }}
+                            {{ transitionLabels[status] }}
                         </button>
                     </div>
                     <p

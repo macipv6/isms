@@ -19,6 +19,7 @@ class EvidenceDownloadService
     {
         $source = null;
         $verified = null;
+        $failureKind = 'stream_failure';
 
         try {
             $verified = tmpfile();
@@ -28,6 +29,7 @@ class EvidenceDownloadService
 
             $source = Storage::disk('evidence')->readStream($evidence->storage_path);
             if (! is_resource($source)) {
+                $failureKind = 'missing_object';
                 throw new EvidenceIntegrityException;
             }
 
@@ -47,6 +49,7 @@ class EvidenceDownloadService
 
                 $size += strlen($chunk);
                 if ($size > $evidence->size_bytes) {
+                    $failureKind = 'wrong_size';
                     throw new EvidenceIntegrityException;
                 }
 
@@ -54,7 +57,13 @@ class EvidenceDownloadService
                 $this->writeAll($verified, $chunk);
             }
 
-            if ($size !== $evidence->size_bytes || ! hash_equals($evidence->sha256, hash_final($hash))) {
+            if ($size !== $evidence->size_bytes) {
+                $failureKind = 'wrong_size';
+                throw new EvidenceIntegrityException;
+            }
+
+            if (! hash_equals($evidence->sha256, hash_final($hash))) {
+                $failureKind = 'wrong_hash';
                 throw new EvidenceIntegrityException;
             }
 
@@ -73,7 +82,7 @@ class EvidenceDownloadService
                 fclose($verified);
             }
 
-            throw new EvidenceIntegrityException($this->integrityFailed($evidence));
+            throw new EvidenceIntegrityException($this->integrityFailed($evidence, $failureKind));
         }
 
         /** @var resource $verified */
@@ -110,10 +119,14 @@ class EvidenceDownloadService
         }
     }
 
-    private function integrityFailed(EvidenceFile $evidence): ?Throwable
+    private function integrityFailed(EvidenceFile $evidence, string $failureKind): ?Throwable
     {
         try {
-            $this->audit->record('evidence.integrity_failed', null, ['evidence_id' => $evidence->id]);
+            $this->audit->record('evidence.integrity_failed', null, [
+                'project_id' => $evidence->project_id,
+                'evidence_id' => $evidence->id,
+                'failure_kind' => $failureKind,
+            ], $evidence->project->organization_id);
 
             return null;
         } catch (Throwable $exception) {
