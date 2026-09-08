@@ -46,7 +46,7 @@ class EvidenceDownloadTest extends TestCase
     }
 
     #[DataProvider('corruptObjects')]
-    public function test_corrupt_or_missing_object_raises_generic_integrity_failure(string $contents, int $size, string $hash): void
+    public function test_corrupt_or_missing_object_raises_generic_integrity_failure(string $contents, int $size, string $hash, string $failureKind): void
     {
         [$evidence] = $this->evidence('private-path.txt', $contents, $size, $hash);
         try {
@@ -55,7 +55,13 @@ class EvidenceDownloadTest extends TestCase
         } catch (EvidenceIntegrityException) {
         }
 
-        $this->assertDatabaseHas('audit_events', ['event_type' => 'evidence.integrity_failed', 'context->evidence_id' => $evidence->id]);
+        $this->assertDatabaseHas('audit_events', [
+            'event_type' => 'evidence.integrity_failed',
+            'organization_id' => $evidence->project->organization_id,
+            'context->project_id' => $evidence->project_id,
+            'context->evidence_id' => $evidence->id,
+            'context->failure_kind' => $failureKind,
+        ]);
     }
 
     public function test_oversized_object_is_rejected_before_it_can_be_streamed(): void
@@ -85,14 +91,14 @@ class EvidenceDownloadTest extends TestCase
     }
 
     /**
-     * @return array<string, array{string, int, string}>
+     * @return array<string, array{string, int, string, string}>
      */
     public static function corruptObjects(): array
     {
         return [
-            'missing' => ['', 1, hash('sha256', 'x')],
-            'wrong size' => ['x', 2, hash('sha256', 'x')],
-            'wrong hash' => ['x', 1, hash('sha256', 'y')],
+            'missing' => ['', 1, hash('sha256', 'x'), 'missing_object'],
+            'wrong size' => ['x', 2, hash('sha256', 'x'), 'wrong_size'],
+            'wrong hash' => ['x', 1, hash('sha256', 'y'), 'wrong_hash'],
         ];
     }
 

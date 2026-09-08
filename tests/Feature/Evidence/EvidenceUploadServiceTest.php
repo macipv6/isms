@@ -65,7 +65,10 @@ class EvidenceUploadServiceTest extends TestCase
             'assessment_question_id' => $question->id,
             'evidence_file_id' => $evidence->id,
         ]);
-        $this->assertSame(1, AuditEvent::query()->where('event_type', 'evidence.uploaded')->count());
+        $this->assertDatabaseHas('audit_events', [
+            'event_type' => 'evidence.uploaded',
+            'organization_id' => $project->organization_id,
+        ]);
         $this->assertSame(0, AuditEvent::query()->where('event_type', 'evidence.linked')->count());
     }
 
@@ -94,7 +97,10 @@ class EvidenceUploadServiceTest extends TestCase
         $this->assertCount(1, Storage::disk('evidence')->allFiles());
         $this->assertDatabaseCount('evidence_question_links', 2);
         $this->assertSame(1, AuditEvent::query()->where('event_type', 'evidence.uploaded')->count());
-        $this->assertSame(1, AuditEvent::query()->where('event_type', 'evidence.linked')->count());
+        $this->assertDatabaseHas('audit_events', [
+            'event_type' => 'evidence.linked',
+            'organization_id' => $project->organization_id,
+        ]);
     }
 
     public function test_hidden_or_foreign_question_is_rejected_before_storage_or_database_writes(): void
@@ -194,7 +200,10 @@ class EvidenceUploadServiceTest extends TestCase
             'evidence_file_id' => $evidence->id,
             'finding_id' => $finding->id,
         ]);
-        $this->assertSame(1, AuditEvent::query()->where('event_type', 'evidence.linked')->count());
+        $this->assertDatabaseHas('audit_events', [
+            'event_type' => 'evidence.linked',
+            'organization_id' => $project->organization_id,
+        ]);
     }
 
     /** @return array{IsmsProject, ProjectAssessment, AssessmentQuestion, User} */

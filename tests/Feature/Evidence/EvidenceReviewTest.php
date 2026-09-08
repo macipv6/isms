@@ -30,6 +30,10 @@ class EvidenceReviewTest extends TestCase
 
         $this->assertSame(EvidenceReviewStatus::Verified, $evidence->fresh()->status);
         $this->assertDatabaseCount('audit_events', 1);
+        $this->assertDatabaseHas('audit_events', [
+            'event_type' => 'evidence.reviewed',
+            'organization_id' => $project->organization_id,
+        ]);
     }
 
     public function test_rejection_requires_a_note_and_audit_failure_rolls_back_the_review(): void
