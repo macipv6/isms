@@ -75,7 +75,16 @@ class EvidenceReviewTest extends TestCase
         $service->review($evidence->fresh(), EvidenceReviewStatus::Verified, 'Korrigierte Prüfung', $actor);
 
         $this->assertSame('Korrigierte Prüfung', $evidence->fresh()->review_note);
-        $this->assertDatabaseCount('audit_events', 1);
+        $this->assertDatabaseCount('audit_events', 2);
+        AuditEvent::query()->each(function (AuditEvent $event): void {
+            $this->assertSame('evidence.reviewed', $event->event_type);
+            $this->assertSame('verified', $event->context['new_status']);
+            $this->assertArrayNotHasKey('review_note', $event->context);
+            $this->assertStringNotContainsString(
+                'Prüfung',
+                json_encode($event->context, JSON_THROW_ON_ERROR),
+            );
+        });
     }
 
     /** @return array{IsmsProject, EvidenceFile, User} */
