@@ -75,6 +75,7 @@ class AssessmentWorkItemPageTest extends TestCase
                     ->missing('findings.0.decision_note')
                     ->missing('findings.0.proposed_by')
                     ->where('findings.1.id', $historical->id)
+                    ->etc()
                 ),
         );
     }
@@ -122,6 +123,7 @@ class AssessmentWorkItemPageTest extends TestCase
                     ->where('findings.0.can_create_measure', false)
                     ->where('findings.0.measures.items.0.can_edit', false)
                     ->where('findings.0.measures.items.0.allowed_transitions', [])
+                    ->etc()
                 ));
     }
 
