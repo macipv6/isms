@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, useForm } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
 import ProjectWorkNavigation from '@/components/ProjectWorkNavigation.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type { OrganizationReference } from '@/types/organization';
@@ -13,19 +14,31 @@ import type {
 const props = defineProps<{
     organization: OrganizationReference;
     project: ProjectWorkReference;
-    filters: { status: MeasureStatus | null };
+    filters: {
+        status: MeasureStatus | null;
+        priority: MeasurePriority | null;
+        due_from: string | null;
+        due_to: string | null;
+    };
     measures: MeasureRegisterItem[];
     canManage: boolean;
 }>();
 
 const base = `/organizations/${props.organization.id}/projects/${props.project.id}`;
-const filterOptions: Array<{ value: MeasureStatus | null; label: string }> = [
-    { value: null, label: 'Alle' },
+const statusOptions: Array<{ value: MeasureStatus | ''; label: string }> = [
+    { value: '', label: 'Alle Status' },
     { value: 'planned', label: 'Geplant' },
     { value: 'in_progress', label: 'In Bearbeitung' },
     { value: 'blocked', label: 'Blockiert' },
     { value: 'completed', label: 'Abgeschlossen' },
     { value: 'cancelled', label: 'Abgebrochen' },
+];
+const priorityOptions: Array<{ value: MeasurePriority | ''; label: string }> = [
+    { value: '', label: 'Alle Prioritäten' },
+    { value: 'critical', label: 'Kritisch' },
+    { value: 'high', label: 'Hoch' },
+    { value: 'medium', label: 'Mittel' },
+    { value: 'low', label: 'Niedrig' },
 ];
 const statusLabels: Record<MeasureStatus, string> = {
     planned: 'Geplant',
@@ -41,10 +54,36 @@ const priorityLabels: Record<MeasurePriority, string> = {
     critical: 'Kritisch',
 };
 
-function filterUrl(status: MeasureStatus | null): string {
-    return status === null
-        ? `${base}/measures`
-        : `${base}/measures?status=${status}`;
+const filterForm = useForm<{
+    status: MeasureStatus | '';
+    priority: MeasurePriority | '';
+    due_from: string;
+    due_to: string;
+}>({
+    status: props.filters.status ?? '',
+    priority: props.filters.priority ?? '',
+    due_from: props.filters.due_from ?? '',
+    due_to: props.filters.due_to ?? '',
+});
+const responsibleSearch = ref('');
+const visibleMeasures = computed(() => {
+    const search = responsibleSearch.value.trim().toLocaleLowerCase('de-DE');
+
+    if (search === '') return props.measures;
+
+    return props.measures.filter((measure) =>
+        `${measure.responsible_name} ${measure.responsible_email ?? ''}`
+            .toLocaleLowerCase('de-DE')
+            .includes(search),
+    );
+});
+
+function applyFilters(): void {
+    filterForm.get(`${base}/measures`, {
+        preserveScroll: true,
+        preserveState: true,
+        replace: true,
+    });
 }
 
 function formatDate(value: string): string {
@@ -91,27 +130,102 @@ function formatDate(value: string): string {
             einsehbar.
         </p>
 
-        <nav
-            class="mt-6 flex flex-wrap gap-2"
-            aria-label="Maßnahmenstatus filtern"
+        <form
+            class="mt-6 grid gap-4 rounded-2xl border border-slate-800 bg-slate-900/40 p-5 md:grid-cols-2 xl:grid-cols-5"
+            @submit.prevent="applyFilters"
         >
-            <Link
-                v-for="filter in filterOptions"
-                :key="filter.value ?? 'all'"
-                :href="filterUrl(filter.value)"
-                :class="
-                    filters.status === filter.value
-                        ? 'border-cyan-500 bg-cyan-500/10 text-cyan-100'
-                        : 'border-slate-700 text-slate-300 hover:bg-slate-900'
-                "
-                class="rounded-full border px-4 py-2 text-sm"
-                >{{ filter.label }}</Link
+            <label class="text-sm text-slate-300">
+                Status
+                <select
+                    v-model="filterForm.status"
+                    class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"
+                >
+                    <option
+                        v-for="option in statusOptions"
+                        :key="option.value"
+                        :value="option.value"
+                    >
+                        {{ option.label }}
+                    </option>
+                </select>
+                <span
+                    v-if="filterForm.errors.status"
+                    class="mt-1 block text-xs text-red-300"
+                >
+                    {{ filterForm.errors.status }}
+                </span>
+            </label>
+            <label class="text-sm text-slate-300">
+                Priorität
+                <select
+                    v-model="filterForm.priority"
+                    class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"
+                >
+                    <option
+                        v-for="option in priorityOptions"
+                        :key="option.value"
+                        :value="option.value"
+                    >
+                        {{ option.label }}
+                    </option>
+                </select>
+                <span
+                    v-if="filterForm.errors.priority"
+                    class="mt-1 block text-xs text-red-300"
+                >
+                    {{ filterForm.errors.priority }}
+                </span>
+            </label>
+            <label class="text-sm text-slate-300">
+                Fällig ab
+                <input
+                    v-model="filterForm.due_from"
+                    type="date"
+                    class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"
+                />
+                <span
+                    v-if="filterForm.errors.due_from"
+                    class="mt-1 block text-xs text-red-300"
+                >
+                    {{ filterForm.errors.due_from }}
+                </span>
+            </label>
+            <label class="text-sm text-slate-300">
+                Fällig bis
+                <input
+                    v-model="filterForm.due_to"
+                    type="date"
+                    class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"
+                />
+                <span
+                    v-if="filterForm.errors.due_to"
+                    class="mt-1 block text-xs text-red-300"
+                >
+                    {{ filterForm.errors.due_to }}
+                </span>
+            </label>
+            <button
+                type="submit"
+                class="self-end rounded-lg bg-cyan-500 px-4 py-2 font-semibold text-slate-950 hover:bg-cyan-400"
             >
-        </nav>
+                Filter anwenden
+            </button>
+        </form>
 
-        <div v-if="measures.length" class="mt-6 space-y-4">
+        <label class="mt-4 block max-w-xl text-sm text-slate-300">
+            Verantwortlich
+            <input
+                v-model="responsibleSearch"
+                type="search"
+                autocomplete="off"
+                placeholder="Name oder E-Mail lokal durchsuchen"
+                class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"
+            />
+        </label>
+
+        <div v-if="visibleMeasures.length" class="mt-6 space-y-4">
             <article
-                v-for="measure in measures"
+                v-for="measure in visibleMeasures"
                 :key="measure.id"
                 class="rounded-2xl border border-slate-800 bg-slate-900/50 p-5"
             >
@@ -173,7 +287,11 @@ function formatDate(value: string): string {
             class="mt-6 rounded-2xl border border-dashed border-slate-700 p-10 text-center"
         >
             <p class="font-medium">
-                Keine Maßnahmen für diesen Filter vorhanden.
+                {{
+                    responsibleSearch
+                        ? 'Keine Maßnahmen entsprechen der lokalen Suche.'
+                        : 'Keine Maßnahmen für diesen Filter vorhanden.'
+                }}
             </p>
             <p class="mt-2 text-sm text-slate-400">
                 Maßnahmen werden aus akzeptierten Feststellungen angelegt.

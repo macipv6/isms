@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\MeasurePriority;
 use App\Enums\MeasureStatus;
 use App\Enums\ProjectStatus;
 use App\Models\IsmsProject;
@@ -20,10 +21,22 @@ class MeasureRegisterController extends Controller
         $this->ensureOwnership($organization, $project);
         Gate::authorize('viewAssessment', $project);
 
+        $dueToRules = ['nullable', 'date_format:Y-m-d'];
+
+        if ($request->filled('due_from')) {
+            $dueToRules[] = 'after_or_equal:due_from';
+        }
+
         $validated = validator($request->query(), [
             'status' => ['nullable', Rule::enum(MeasureStatus::class)],
+            'priority' => ['nullable', Rule::enum(MeasurePriority::class)],
+            'due_from' => ['nullable', 'date_format:Y-m-d'],
+            'due_to' => $dueToRules,
         ])->validate();
         $status = $validated['status'] ?? null;
+        $priority = $validated['priority'] ?? null;
+        $dueFrom = $validated['due_from'] ?? null;
+        $dueTo = $validated['due_to'] ?? null;
 
         $measures = Measure::query()
             ->select([
@@ -32,6 +45,9 @@ class MeasureRegisterController extends Controller
             ])
             ->where('project_id', $project->id)
             ->when($status, fn ($query, string $value) => $query->where('status', $value))
+            ->when($priority, fn ($query, string $value) => $query->where('priority', $value))
+            ->when($dueFrom, fn ($query, string $value) => $query->whereDate('due_date', '>=', $value))
+            ->when($dueTo, fn ($query, string $value) => $query->whereDate('due_date', '<=', $value))
             ->with('finding:id,project_id,assessment_question_id,title,status')
             ->with('finding.question:id,question_key,title')
             ->orderByRaw('due_date is null')
@@ -60,7 +76,12 @@ class MeasureRegisterController extends Controller
         return Inertia::render('measures/Index', [
             'organization' => $organization->only(['id', 'name']),
             'project' => $project->only(['id', 'name']),
-            'filters' => ['status' => $status],
+            'filters' => [
+                'status' => $status,
+                'priority' => $priority,
+                'due_from' => $dueFrom,
+                'due_to' => $dueTo,
+            ],
             'measures' => $measures,
             'canManage' => $this->canManage($organization, $project),
         ]);
