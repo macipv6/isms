@@ -21,6 +21,7 @@ use App\Services\Assessment\AssessmentStarter;
 use App\Services\WorkItems\QuestionWorkItemPresenter;
 use Database\Seeders\AssessmentCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -125,6 +126,20 @@ class AssessmentWorkItemPageTest extends TestCase
                     ->where('findings.0.measures.items.0.allowed_transitions', [])
                     ->etc()
                 ));
+    }
+
+    public function test_assessment_page_eager_loads_question_answers(): void
+    {
+        [$customer, $project, , , $actor] = $this->context();
+        Model::preventLazyLoading();
+
+        try {
+            $this->actingAs($actor)
+                ->get('/organizations/'.$customer->id.'/projects/'.$project->id.'/assessment')
+                ->assertOk();
+        } finally {
+            Model::preventLazyLoading(false);
+        }
     }
 
     /** @return array{Organization, IsmsProject, ProjectAssessment, AssessmentQuestion, User} */

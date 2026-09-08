@@ -65,6 +65,19 @@ class EvidenceReviewTest extends TestCase
         $this->assertSame(EvidenceReviewStatus::PendingReview, $evidence->fresh()->status);
     }
 
+    public function test_same_status_replaces_a_changed_note_but_identical_repetition_remains_idempotent(): void
+    {
+        [$project, $evidence, $actor] = $this->context();
+        $service = app(EvidenceReviewService::class);
+
+        $service->review($evidence, EvidenceReviewStatus::Verified, 'Erste Prüfung', $actor);
+        $service->review($evidence->fresh(), EvidenceReviewStatus::Verified, 'Korrigierte Prüfung', $actor);
+        $service->review($evidence->fresh(), EvidenceReviewStatus::Verified, 'Korrigierte Prüfung', $actor);
+
+        $this->assertSame('Korrigierte Prüfung', $evidence->fresh()->review_note);
+        $this->assertDatabaseCount('audit_events', 1);
+    }
+
     /** @return array{IsmsProject, EvidenceFile, User} */
     private function context(): array
     {

@@ -72,6 +72,39 @@ class EvidenceUploadServiceTest extends TestCase
         $this->assertSame(0, AuditEvent::query()->where('event_type', 'evidence.linked')->count());
     }
 
+    public function test_upload_stores_the_same_controlled_bytes_that_were_validated_and_hashed(): void
+    {
+        [$project, , $question, $actor] = $this->context();
+        $path = tempnam(sys_get_temp_dir(), 'evidence-toctou-');
+        $this->assertIsString($path);
+        file_put_contents($path, 'approved policy');
+        $file = new class($path) extends UploadedFile
+        {
+            public function __construct(string $path)
+            {
+                parent::__construct($path, 'policy.txt', null, null, true);
+            }
+
+            public function getMimeType(): ?string
+            {
+                $mimeType = parent::getMimeType();
+                file_put_contents($this->getPathname(), '<?php echo "changed after validation";');
+
+                return $mimeType;
+            }
+        };
+
+        try {
+            $evidence = app(EvidenceUploadService::class)->uploadForQuestion($project, $question, $file, $actor);
+
+            $this->assertSame('approved policy', Storage::disk('evidence')->get($evidence->storage_path));
+            $this->assertSame(strlen('approved policy'), $evidence->size_bytes);
+            $this->assertSame(hash('sha256', 'approved policy'), $evidence->sha256);
+        } finally {
+            @unlink($path);
+        }
+    }
+
     public function test_duplicate_bytes_reuse_one_object_and_add_one_link_with_linked_audit_event(): void
     {
         [$project, $assessment, $question, $actor] = $this->context();

@@ -102,7 +102,29 @@ class EvidenceFileValidatorTest extends TestCase
             'seven zip alias' => ['archive.7z', "7z\xbc\xaf'\x1c"],
             'tar archive alias' => ['archive.tar.gz', 'compressed'],
             'macro-enabled word document' => ['report.docm', 'not allowed'],
+            'arbitrary zip renamed as docx' => ['report.docx', self::zipContents(['readme.txt' => 'not a Word package'])],
+            'arbitrary zip renamed as xlsx' => ['register.xlsx', self::zipContents(['readme.txt' => 'not an Excel package'])],
+            'docx with dangerous embedded script' => ['report.docx', self::zipContents([
+                '[Content_Types].xml' => '<Types/>',
+                'word/document.xml' => '<w:document/>',
+                'word/payload.php' => '<?php echo "unsafe";',
+            ])],
         ];
+    }
+
+    #[Test]
+    public function encrypted_office_package_is_rejected(): void
+    {
+        $file = $this->upload('report.docx', self::zipContents([
+            '[Content_Types].xml' => '<Types/>',
+            'word/document.xml' => '<w:document/>',
+        ]));
+        $zip = new \ZipArchive;
+        $this->assertTrue($zip->open($file->getPathname()) === true);
+        $this->assertTrue($zip->setEncryptionName('word/document.xml', \ZipArchive::EM_AES_256, 'secret'));
+        $zip->close();
+
+        $this->assertRejected($file);
     }
 
     protected function tearDown(): void
