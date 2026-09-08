@@ -37,14 +37,12 @@ class EvidenceReviewService
 
             $old = $locked->status;
             $locked->update(['status' => $status, 'review_note' => $note, 'reviewed_by' => $actor->id, 'reviewed_at' => now()]);
-            if ($old !== $status) {
-                $this->audit->record(
-                    'evidence.reviewed',
-                    $actor,
-                    ['project_id' => $locked->project_id, 'evidence_id' => $locked->id, 'old_status' => $old->value, 'new_status' => $status->value],
-                    $locked->project->organization_id,
-                );
-            }
+            $this->audit->record(
+                'evidence.reviewed',
+                $actor,
+                ['project_id' => $locked->project_id, 'evidence_id' => $locked->id, 'old_status' => $old->value, 'new_status' => $status->value],
+                $locked->project->organization_id,
+            );
 
             return $locked;
         });
