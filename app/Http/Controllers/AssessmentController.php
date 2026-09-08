@@ -13,6 +13,7 @@ use App\Services\Assessment\AssessmentProgress;
 use App\Services\Assessment\AssessmentStarter;
 use App\Services\Audit\AuditLogger;
 use App\Services\WorkItems\QuestionWorkItemPresenter;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -64,7 +65,8 @@ class AssessmentController extends Controller
         Gate::authorize('viewAssessment', $project);
 
         $assessment = $project->assessment()->firstOrFail();
-        $questions = $evaluator->applicableQuestions($assessment);
+        /** @var EloquentCollection<int, AssessmentQuestion> $questions */
+        $questions = new EloquentCollection($evaluator->applicableQuestions($assessment)->all());
         $project->loadMissing(['organization', 'evidenceFiles']);
         $assessment->loadMissing('answers.question');
         $assessment->setRelation('project', $project);
