@@ -95,6 +95,7 @@ class MeasureWorkflowTest extends TestCase
             'title' => 'Überarbeitete Maßnahme',
             'priority' => MeasurePriority::Critical->value,
             'responsible_email' => null,
+            'due_date' => '2001-01-01',
         ]), $actor);
 
         $this->assertSame('2001-01-01', $updated->due_date->format('Y-m-d'));
