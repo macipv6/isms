@@ -111,6 +111,51 @@ class WorkItemRegisterPagesTest extends TestCase
         }
     }
 
+    public function test_measure_register_combines_safe_filters_and_validates_each_field(): void
+    {
+        [$customer, $project, $finding, $actor] = $this->context();
+        $matching = Measure::factory()->for($project)->for($finding)->create([
+            'title' => 'Passende Maßnahme',
+            'status' => MeasureStatus::InProgress,
+            'priority' => MeasurePriority::High,
+            'due_date' => '2026-10-15',
+        ]);
+        Measure::factory()->for($project)->for($finding)->create([
+            'status' => MeasureStatus::Planned,
+            'priority' => MeasurePriority::High,
+            'due_date' => '2026-10-15',
+        ]);
+        Measure::factory()->for($project)->for($finding)->create([
+            'status' => MeasureStatus::InProgress,
+            'priority' => MeasurePriority::Low,
+            'due_date' => '2026-11-15',
+        ]);
+
+        $url = $this->url($customer, $project, 'measures');
+        $query = 'status=in_progress&priority=high&due_from=2026-10-01&due_to=2026-10-31';
+
+        $this->actingAs($actor)->get($url.'?'.$query)
+            ->assertOk()
+            ->assertInertia(fn (Assert $page): Assert => $page
+                ->where('filters.status', 'in_progress')
+                ->where('filters.priority', 'high')
+                ->where('filters.due_from', '2026-10-01')
+                ->where('filters.due_to', '2026-10-31')
+                ->has('measures', 1)
+                ->where('measures.0.id', $matching->id));
+
+        foreach ([
+            ['priority=urgent', 'priority'],
+            ['due_from=01.10.2026', 'due_from'],
+            ['due_to=31.10.2026', 'due_to'],
+            ['due_from=2026-11-01&due_to=2026-10-31', 'due_to'],
+        ] as [$invalidQuery, $field]) {
+            $this->from($url)->actingAs($actor)->get($url.'?'.$invalidQuery)
+                ->assertRedirect($url)
+                ->assertSessionHasErrors($field);
+        }
+    }
+
     public function test_register_access_rejects_customer_users_and_nested_route_substitution(): void
     {
         [$customer, $project, $finding, $actor] = $this->context();
