@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\FindingSeverity;
 use App\Enums\FindingStatus;
+use Carbon\CarbonImmutable;
 use Database\Factories\FindingFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -15,6 +16,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * @property FindingSeverity $severity
  * @property FindingStatus $status
+ * @property CarbonImmutable $proposed_at
+ * @property-read AssessmentQuestion $question
  */
 class Finding extends Model
 {

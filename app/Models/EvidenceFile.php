@@ -3,8 +3,10 @@
 namespace App\Models;
 
 use App\Enums\EvidenceReviewStatus;
+use Carbon\CarbonImmutable;
 use Database\Factories\EvidenceFileFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,6 +15,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 /**
  * @property EvidenceReviewStatus $status
  * @property int $size_bytes
+ * @property CarbonImmutable $uploaded_at
+ * @property-read Collection<int, AssessmentQuestion> $questions
+ * @property-read Collection<int, Finding> $findings
  */
 class EvidenceFile extends Model
 {

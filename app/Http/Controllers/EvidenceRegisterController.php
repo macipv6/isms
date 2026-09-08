@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Enums\EvidenceReviewStatus;
 use App\Enums\ProjectStatus;
+use App\Models\AssessmentQuestion;
 use App\Models\EvidenceFile;
+use App\Models\Finding;
 use App\Models\IsmsProject;
 use App\Models\Organization;
 use Illuminate\Http\Request;
@@ -44,12 +46,12 @@ class EvidenceRegisterController extends Controller
                 'status' => $file->status->value,
                 'uploaded_at' => $file->uploaded_at->toIso8601String(),
                 'download_url' => $this->baseUrl($organization, $project).'/evidence/'.$file->id.'/download',
-                'questions' => $file->questions->map(fn ($question): array => [
+                'questions' => $file->questions->map(fn (AssessmentQuestion $question): array => [
                     'id' => $question->id,
                     'question_key' => $question->question_key,
                     'title' => $question->title,
                 ])->values()->all(),
-                'findings' => $file->findings->map(fn ($finding): array => [
+                'findings' => $file->findings->map(fn (Finding $finding): array => [
                     'id' => $finding->id,
                     'title' => $finding->title,
                     'status' => $finding->status->value,

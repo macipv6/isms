@@ -4,13 +4,19 @@ namespace App\Models;
 
 use App\Enums\MeasurePriority;
 use App\Enums\MeasureStatus;
+use Carbon\CarbonImmutable;
 use Database\Factories\MeasureFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/** @property MeasureStatus $status */
+/**
+ * @property MeasurePriority $priority
+ * @property MeasureStatus $status
+ * @property CarbonImmutable $due_date
+ * @property-read Finding $finding
+ */
 class Measure extends Model
 {
     /** @use HasFactory<MeasureFactory> */
