@@ -45,8 +45,8 @@ class WorkItemRegisterPagesTest extends TestCase
 
         $foreignProject = IsmsProject::factory()->create();
         EvidenceFile::factory()->for($foreignProject)->create(['original_name' => 'fremd.pdf']);
-        Finding::factory()->for($foreignProject)->create(['title' => 'Fremde Feststellung']);
-        Measure::factory()->for($foreignProject)->create(['title' => 'Fremde Maßnahme']);
+        $foreignFinding = Finding::factory()->for($foreignProject)->create(['title' => 'Fremde Feststellung']);
+        Measure::factory()->for($foreignProject)->for($foreignFinding)->create(['title' => 'Fremde Maßnahme']);
 
         $this->actingAs($actor)->get($this->url($customer, $project, 'evidence'))
             ->assertOk()
