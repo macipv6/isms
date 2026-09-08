@@ -5,9 +5,12 @@ use App\Http\Controllers\AssessmentController;
 use App\Http\Controllers\Auth\EntraAuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EvidenceController;
+use App\Http\Controllers\EvidenceRegisterController;
 use App\Http\Controllers\FindingController;
+use App\Http\Controllers\FindingRegisterController;
 use App\Http\Controllers\IsmsProjectController;
 use App\Http\Controllers\MeasureController;
+use App\Http\Controllers\MeasureRegisterController;
 use App\Http\Controllers\OrganizationController;
 use Illuminate\Support\Facades\Route;
 
@@ -34,6 +37,10 @@ Route::middleware(['auth', 'active-user'])->group(function (): void {
     Route::post('/organizations/{organization}/projects', [IsmsProjectController::class, 'store'])->name('projects.store');
     Route::get('/organizations/{organization}/projects/{project}/edit', [IsmsProjectController::class, 'edit'])->name('projects.edit');
     Route::put('/organizations/{organization}/projects/{project}', [IsmsProjectController::class, 'update'])->name('projects.update');
+
+    Route::get('/organizations/{organization}/projects/{project}/evidence', EvidenceRegisterController::class)->name('evidence.index');
+    Route::get('/organizations/{organization}/projects/{project}/findings', FindingRegisterController::class)->name('findings.index');
+    Route::get('/organizations/{organization}/projects/{project}/measures', MeasureRegisterController::class)->name('measures.index');
 
     Route::post('/organizations/{organization}/projects/{project}/assessment', [AssessmentController::class, 'start'])->name('assessments.start');
     Route::get('/organizations/{organization}/projects/{project}/assessment', [AssessmentController::class, 'show'])->name('assessments.show');
