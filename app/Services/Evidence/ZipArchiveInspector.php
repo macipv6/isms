@@ -20,7 +20,7 @@ class ZipArchiveInspector
         'vbe', 'vbs', 'vhd', 'vhdx', 'war', 'xlsm', 'xlsx', 'xz', 'zip', 'zsh',
     ];
 
-    public function assertSafe(string $path): void
+    public function assertSafe(string $path, ?string $officeKind = null): void
     {
         if (! is_file($path) || ! is_readable($path)) {
             $this->reject();
@@ -37,6 +37,7 @@ class ZipArchiveInspector
             $opened = true;
             $regularFiles = 0;
             $uncompressedBytes = 0;
+            $entryNames = [];
 
             for ($index = 0; $index < $archive->numFiles; $index++) {
                 $stat = $archive->statIndex($index, ZipArchive::FL_UNCHANGED);
@@ -54,6 +55,7 @@ class ZipArchiveInspector
 
                 $this->assertRegularNonExecutableFile($archive, $index);
                 $this->assertAllowedExtension($normalizedName);
+                $entryNames[$normalizedName] = true;
 
                 if ($stat['size'] < 0) {
                     $this->reject();
@@ -63,6 +65,8 @@ class ZipArchiveInspector
                 $uncompressedBytes += $stat['size'];
                 $this->assertArchiveLimits($regularFiles, $uncompressedBytes);
             }
+
+            $this->assertOfficeStructure($entryNames, $officeKind);
         } finally {
             if ($opened) {
                 $archive->close();
@@ -155,6 +159,24 @@ class ZipArchiveInspector
         $extension = strtolower(pathinfo(basename($normalizedName), PATHINFO_EXTENSION));
 
         if (in_array($extension, self::BLOCKED_EXTENSIONS, true)) {
+            $this->reject();
+        }
+    }
+
+    /** @param array<string, bool> $entryNames */
+    private function assertOfficeStructure(array $entryNames, ?string $officeKind): void
+    {
+        if ($officeKind === null) {
+            return;
+        }
+
+        $requiredDocument = match ($officeKind) {
+            'docx' => 'word/document.xml',
+            'xlsx' => 'xl/workbook.xml',
+            default => $this->reject(),
+        };
+
+        if (! isset($entryNames['[Content_Types].xml'], $entryNames[$requiredDocument])) {
             $this->reject();
         }
     }

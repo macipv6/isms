@@ -74,6 +74,7 @@ class AssessmentController extends Controller
             $question->setRelation('assessment', $assessment);
         });
         $questions->load([
+            'answer',
             'evidenceFiles',
             'findings' => fn ($query) => $query->latest('proposed_at'),
             'findings.evidenceFiles',

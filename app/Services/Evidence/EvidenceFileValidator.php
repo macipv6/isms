@@ -91,8 +91,11 @@ class EvidenceFileValidator
             $this->reject();
         }
 
-        if ($type['kind'] === 'zip') {
-            $this->zipArchiveInspector->assertSafe($temporaryPath);
+        if (in_array($type['kind'], ['zip', 'docx', 'xlsx'], true)) {
+            $this->zipArchiveInspector->assertSafe(
+                $temporaryPath,
+                $type['kind'] === 'zip' ? null : $type['kind'],
+            );
         }
 
         return new ValidatedEvidenceFile(
