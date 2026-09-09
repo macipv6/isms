@@ -20,13 +20,13 @@ class DependencyEdgeFactory extends Factory
         return [
             'project_id' => IsmsProject::factory(),
             'source_process_id' => fn (array $attributes): string => BusinessProcess::factory()
-                ->for(IsmsProject::query()->findOrFail($attributes['project_id']))
+                ->for(IsmsProject::query()->findOrFail($attributes['project_id']), 'project')
                 ->create()
                 ->id,
             'source_asset_id' => null,
             'target_process_id' => null,
             'target_asset_id' => fn (array $attributes): string => Asset::factory()
-                ->for(IsmsProject::query()->findOrFail($attributes['project_id']))
+                ->for(IsmsProject::query()->findOrFail($attributes['project_id']), 'project')
                 ->create()
                 ->id,
             'importance' => DependencyImportance::Supporting,

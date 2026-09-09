@@ -64,11 +64,11 @@ class RegisterSchemaTest extends TestCase
     public function test_register_key_is_unique_within_its_project_but_reusable_in_another_project(): void
     {
         $project = IsmsProject::factory()->create();
-        BusinessProcess::factory()->for($project)->create(['key' => 'SALES.EU']);
-        BusinessProcess::factory()->for(IsmsProject::factory()->create())->create(['key' => 'SALES.EU']);
+        BusinessProcess::factory()->for($project, 'project')->create(['key' => 'SALES.EU']);
+        BusinessProcess::factory()->for(IsmsProject::factory()->create(), 'project')->create(['key' => 'SALES.EU']);
 
         $this->expectException(QueryException::class);
-        BusinessProcess::factory()->for($project)->create(['key' => 'SALES.EU']);
+        BusinessProcess::factory()->for($project, 'project')->create(['key' => 'SALES.EU']);
     }
 
     public function test_register_key_must_match_the_stable_uppercase_format(): void
@@ -81,8 +81,8 @@ class RegisterSchemaTest extends TestCase
     {
         $first = IsmsProject::factory()->create();
         $second = IsmsProject::factory()->create();
-        $source = BusinessProcess::factory()->for($first)->create();
-        $target = Asset::factory()->for($second)->create();
+        $source = BusinessProcess::factory()->for($first, 'project')->create();
+        $target = Asset::factory()->for($second, 'project')->create();
 
         $this->expectException(QueryException::class);
         DependencyEdge::factory()->create([
@@ -95,10 +95,10 @@ class RegisterSchemaTest extends TestCase
     public function test_dependency_allows_only_the_specified_endpoint_shapes(): void
     {
         $project = IsmsProject::factory()->create();
-        $sourceProcess = BusinessProcess::factory()->for($project)->create();
-        $targetProcess = BusinessProcess::factory()->for($project)->create();
-        $sourceAsset = Asset::factory()->for($project)->create();
-        $targetAsset = Asset::factory()->for($project)->create();
+        $sourceProcess = BusinessProcess::factory()->for($project, 'project')->create();
+        $targetProcess = BusinessProcess::factory()->for($project, 'project')->create();
+        $sourceAsset = Asset::factory()->for($project, 'project')->create();
+        $targetAsset = Asset::factory()->for($project, 'project')->create();
 
         DependencyEdge::factory()->create([
             'project_id' => $project->id,
@@ -124,8 +124,8 @@ class RegisterSchemaTest extends TestCase
     public function test_dependency_rejects_asset_to_process_and_empty_or_multiple_endpoints(): void
     {
         $project = IsmsProject::factory()->create();
-        $asset = Asset::factory()->for($project)->create();
-        $process = BusinessProcess::factory()->for($project)->create();
+        $asset = Asset::factory()->for($project, 'project')->create();
+        $process = BusinessProcess::factory()->for($project, 'project')->create();
 
         foreach ([
             ['source_process_id' => null, 'source_asset_id' => $asset->id, 'target_process_id' => $process->id, 'target_asset_id' => null],
@@ -144,8 +144,8 @@ class RegisterSchemaTest extends TestCase
     public function test_only_one_active_edge_of_each_endpoint_pair_is_allowed(): void
     {
         $project = IsmsProject::factory()->create();
-        $source = BusinessProcess::factory()->for($project)->create();
-        $target = Asset::factory()->for($project)->create();
+        $source = BusinessProcess::factory()->for($project, 'project')->create();
+        $target = Asset::factory()->for($project, 'project')->create();
         $attributes = [
             'project_id' => $project->id,
             'source_process_id' => $source->id,
