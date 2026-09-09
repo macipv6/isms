@@ -76,18 +76,25 @@ class BusinessProcessService
         });
     }
 
-    /** @param array<string,mixed> $data @return array<string,mixed> */
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function validate(array $data, bool $creating): array
     {
-        $rules = ['name' => ['required','string','max:160'], 'description' => ['nullable','string','max:4000'], 'owner_name' => ['nullable','string','max:160'], 'owner_email' => ['nullable','email:rfc','max:254']];
+        $rules = ['name' => ['required', 'string', 'max:160'], 'description' => ['nullable', 'string', 'max:4000'], 'owner_name' => ['nullable', 'string', 'max:160'], 'owner_email' => ['nullable', 'email:rfc', 'max:254']];
         if ($creating) {
             $rules['key'] = ['required', 'string'];
             $rules['active'] = ['sometimes', 'boolean'];
         }
         $validated = Validator::make($data, $rules)->validate();
-        if ($creating) $validated['active'] = $validated['active'] ?? true;
+        if ($creating) {
+            $validated['active'] = $validated['active'] ?? true;
+        }
+
         return $validated;
     }
+
     private function lockedWritableProject(IsmsProject $project, User $actor): IsmsProject
     {
         $actor->loadMissing('organization');

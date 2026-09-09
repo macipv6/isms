@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Registers;
 
-use App\Enums\ProjectStatus;
 use App\Enums\UserRole;
 use App\Models\Asset;
 use App\Models\IsmsProject;
@@ -64,6 +63,7 @@ class RegisterAuthorizationTest extends TestCase
         $project = IsmsProject::factory()->for($customer)->create(['status' => $status]);
         $actorOrganization = Organization::factory()->create(['organization_type' => $actorOrganizationType, 'entra_tenant_id' => $actorOrganizationType === 'customer' ? null : fake()->uuid()]);
         $actor = User::factory()->for($actorOrganization)->create(['is_active' => $active, 'role' => $role]);
+
         return [$customer, $project, $actor];
     }
 
