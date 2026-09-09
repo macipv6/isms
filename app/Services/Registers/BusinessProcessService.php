@@ -35,6 +35,8 @@ class BusinessProcessService
                 $this->audit->record('business_process.created', $actor, ['project_id' => $lockedProject->id, 'business_process_id' => $process->id, 'key' => $process->key], $lockedProject->organization_id);
             }
 
+            $process->refresh();
+
             return $process;
         });
     }
@@ -47,7 +49,7 @@ class BusinessProcessService
         return DB::transaction(function () use ($process, $data, $actor, $expectedUpdatedAt, $audit): BusinessProcess {
             $project = $this->lockedWritableProject($process->project, $actor);
             $locked = $this->locked($project, $process);
-            if ($locked->updated_at->getTimestamp() !== CarbonImmutable::parse($expectedUpdatedAt)->getTimestamp()) {
+            if (! $locked->updated_at->equalTo(CarbonImmutable::parse($expectedUpdatedAt))) {
                 $this->reject('updated_at', 'Der Datensatz wurde zwischenzeitlich geändert.');
             }
             $locked->fill($data);

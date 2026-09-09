@@ -37,6 +37,8 @@ class AssetService
                 $this->audit->record('asset.created', $actor, ['project_id' => $lockedProject->id, 'asset_id' => $asset->id, 'key' => $asset->key], $lockedProject->organization_id);
             }
 
+            $asset->refresh();
+
             return $asset;
         });
     }
@@ -49,7 +51,7 @@ class AssetService
         return DB::transaction(function () use ($asset, $data, $actor, $expectedUpdatedAt, $audit): Asset {
             $project = $this->project($asset->project, $actor);
             $locked = $this->locked($project, $asset);
-            if ($locked->updated_at->getTimestamp() !== CarbonImmutable::parse($expectedUpdatedAt)->getTimestamp()) {
+            if (! $locked->updated_at->equalTo(CarbonImmutable::parse($expectedUpdatedAt))) {
                 $this->reject('updated_at', 'Der Datensatz wurde zwischenzeitlich geändert.');
             }
             $locked->fill($data);
