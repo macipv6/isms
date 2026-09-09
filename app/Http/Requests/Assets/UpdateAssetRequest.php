@@ -1,4 +1,35 @@
 <?php
+
 namespace App\Http\Requests\Assets;
-use App\Enums\AssetType; use App\Models\Asset; use App\Models\IsmsProject; use App\Models\Organization; use Illuminate\Foundation\Http\FormRequest; use Illuminate\Support\Facades\Gate; use Illuminate\Validation\Rule;
-class UpdateAssetRequest extends FormRequest { public function authorize(): bool { return Gate::allows('update',$this->asset()); } public function rules(): array { return ['name'=>['required','string','max:160'],'type'=>['required',Rule::enum(AssetType::class)],'description'=>['nullable','string','max:4000'],'owner_name'=>['nullable','string','max:160'],'owner_email'=>['nullable','email:rfc','max:254'],'updated_at'=>['required','date']]; } private function asset(): Asset { $o=$this->route('organization');$p=$this->route('project');$r=$this->route('asset');abort_unless($o instanceof Organization&&$p instanceof IsmsProject&&$r instanceof Asset&&$o->organization_type==='customer'&&$p->organization_id===$o->id&&$r->project_id===$p->id,404);return $r; } }
+
+use App\Enums\AssetType;
+use App\Models\Asset;
+use App\Models\IsmsProject;
+use App\Models\Organization;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
+
+class UpdateAssetRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return Gate::allows('update', $this->asset());
+    }
+
+    /** @return array<string, list<mixed>> */
+    public function rules(): array
+    {
+        return ['name' => ['required', 'string', 'max:160'], 'type' => ['required', Rule::enum(AssetType::class)], 'description' => ['nullable', 'string', 'max:4000'], 'owner_name' => ['nullable', 'string', 'max:160'], 'owner_email' => ['nullable', 'email:rfc', 'max:254'], 'updated_at' => ['required', 'date']];
+    }
+
+    private function asset(): Asset
+    {
+        $organization = $this->route('organization');
+        $project = $this->route('project');
+        $asset = $this->route('asset');
+        abort_unless($organization instanceof Organization && $project instanceof IsmsProject && $asset instanceof Asset && $organization->organization_type === 'customer' && $project->organization_id === $organization->id && $asset->project_id === $project->id, 404);
+
+        return $asset;
+    }
+}

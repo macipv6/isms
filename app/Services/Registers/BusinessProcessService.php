@@ -23,11 +23,15 @@ class BusinessProcessService
         $data['key'] = RegisterKey::normalize($data['key']);
         return DB::transaction(function () use ($project, $data, $actor, $audit): BusinessProcess {
             $lockedProject = $this->lockedWritableProject($project, $actor);
-            if (BusinessProcess::query()->where('project_id', $lockedProject->id)->where('key', $data['key'])->exists()) $this->reject('key', 'Dieser Schlüssel wird bereits verwendet.');
+            if (BusinessProcess::query()->where('project_id', $lockedProject->id)->where('key', $data['key'])->exists()) {
+                $this->reject('key', 'Dieser Schlüssel wird bereits verwendet.');
+            }
             $active = $data['active'];
             unset($data['active']);
             $process = BusinessProcess::query()->create([...$data, 'project_id' => $lockedProject->id, 'is_active' => $active, 'created_by' => $actor->id]);
-            if ($audit) $this->audit->record('business_process.created', $actor, ['project_id' => $lockedProject->id, 'business_process_id' => $process->id, 'key' => $process->key], $lockedProject->organization_id);
+            if ($audit) {
+                $this->audit->record('business_process.created', $actor, ['project_id' => $lockedProject->id, 'business_process_id' => $process->id, 'key' => $process->key], $lockedProject->organization_id);
+            }
             return $process;
         });
     }
@@ -37,12 +41,20 @@ class BusinessProcessService
     {
         $data = $this->validate($attributes, false);
         return DB::transaction(function () use ($process, $data, $actor, $expectedUpdatedAt, $audit): BusinessProcess {
-            $project = $this->lockedWritableProject($process->project, $actor); $locked = $this->locked($project, $process);
-            if ($locked->updated_at->toIso8601String() !== $expectedUpdatedAt) $this->reject('updated_at', 'Der Datensatz wurde zwischenzeitlich geändert.');
-            $locked->fill($data); $changed = array_values(array_intersect(['name', 'description', 'owner_name', 'owner_email'], array_keys($locked->getDirty())));
-            if ($changed === []) return $locked;
+            $project = $this->lockedWritableProject($process->project, $actor);
+            $locked = $this->locked($project, $process);
+            if ($locked->updated_at->toIso8601String() !== $expectedUpdatedAt) {
+                $this->reject('updated_at', 'Der Datensatz wurde zwischenzeitlich geändert.');
+            }
+            $locked->fill($data);
+            $changed = array_values(array_intersect(['name', 'description', 'owner_name', 'owner_email'], array_keys($locked->getDirty())));
+            if ($changed === []) {
+                return $locked;
+            }
             $locked->save();
-            if ($audit) $this->audit->record('business_process.updated', $actor, ['project_id' => $project->id, 'business_process_id' => $locked->id, 'key' => $locked->key, 'changed_fields' => $changed], $project->organization_id);
+            if ($audit) {
+                $this->audit->record('business_process.updated', $actor, ['project_id' => $project->id, 'business_process_id' => $locked->id, 'key' => $locked->key, 'changed_fields' => $changed], $project->organization_id);
+            }
             return $locked;
         });
     }
@@ -50,10 +62,16 @@ class BusinessProcessService
     public function changeStatus(BusinessProcess $process, bool $active, User $actor, bool $audit = true): BusinessProcess
     {
         return DB::transaction(function () use ($process, $active, $actor, $audit): BusinessProcess {
-            $project = $this->lockedWritableProject($process->project, $actor); $locked = $this->locked($project, $process);
-            if ($locked->is_active === $active) return $locked;
-            $old = $locked->is_active; $locked->update(['is_active' => $active]);
-            if ($audit) $this->audit->record('business_process.status_changed', $actor, ['project_id' => $project->id, 'business_process_id' => $locked->id, 'key' => $locked->key, 'old_active' => $old ? 'true' : 'false', 'new_active' => $active ? 'true' : 'false'], $project->organization_id);
+            $project = $this->lockedWritableProject($process->project, $actor);
+            $locked = $this->locked($project, $process);
+            if ($locked->is_active === $active) {
+                return $locked;
+            }
+            $old = $locked->is_active;
+            $locked->update(['is_active' => $active]);
+            if ($audit) {
+                $this->audit->record('business_process.status_changed', $actor, ['project_id' => $project->id, 'business_process_id' => $locked->id, 'key' => $locked->key, 'old_active' => $old ? 'true' : 'false', 'new_active' => $active ? 'true' : 'false'], $project->organization_id);
+            }
             return $locked;
         });
     }

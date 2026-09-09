@@ -1,4 +1,33 @@
 <?php
+
 namespace App\Http\Requests\Assets;
-use App\Models\Asset; use App\Models\IsmsProject; use App\Models\Organization; use Illuminate\Foundation\Http\FormRequest; use Illuminate\Support\Facades\Gate;
-class ChangeAssetStatusRequest extends FormRequest { public function authorize(): bool { return Gate::allows('changeStatus',$this->asset()); } public function rules(): array { return ['active'=>['required','boolean']]; } private function asset(): Asset { $o=$this->route('organization');$p=$this->route('project');$r=$this->route('asset');abort_unless($o instanceof Organization&&$p instanceof IsmsProject&&$r instanceof Asset&&$o->organization_type==='customer'&&$p->organization_id===$o->id&&$r->project_id===$p->id,404);return $r; } }
+
+use App\Models\Asset;
+use App\Models\IsmsProject;
+use App\Models\Organization;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Gate;
+
+class ChangeAssetStatusRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return Gate::allows('changeStatus', $this->asset());
+    }
+
+    /** @return array<string, list<mixed>> */
+    public function rules(): array
+    {
+        return ['active' => ['required', 'boolean']];
+    }
+
+    private function asset(): Asset
+    {
+        $organization = $this->route('organization');
+        $project = $this->route('project');
+        $asset = $this->route('asset');
+        abort_unless($organization instanceof Organization && $project instanceof IsmsProject && $asset instanceof Asset && $organization->organization_type === 'customer' && $project->organization_id === $organization->id && $asset->project_id === $project->id, 404);
+
+        return $asset;
+    }
+}
