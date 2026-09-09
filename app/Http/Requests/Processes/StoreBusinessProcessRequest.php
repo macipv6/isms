@@ -1,0 +1,4 @@
+<?php
+namespace App\Http\Requests\Processes;
+use App\Models\BusinessProcess; use App\Models\IsmsProject; use App\Models\Organization; use Illuminate\Foundation\Http\FormRequest; use Illuminate\Support\Facades\Gate;
+class StoreBusinessProcessRequest extends FormRequest { public function authorize(): bool { return Gate::allows('create',[BusinessProcess::class,$this->project()]); } public function rules(): array { return ['key'=>['required','string'],'name'=>['required','string','max:160'],'description'=>['nullable','string','max:4000'],'owner_name'=>['nullable','string','max:160'],'owner_email'=>['nullable','email:rfc','max:254'],'active'=>['sometimes','boolean']]; } private function project(): IsmsProject { $o=$this->route('organization');$p=$this->route('project');abort_unless($o instanceof Organization&&$p instanceof IsmsProject&&$o->organization_type==='customer'&&$p->organization_id===$o->id,404);return $p; } }

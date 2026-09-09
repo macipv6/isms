@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\AssessmentAnswerController;
 use App\Http\Controllers\AssessmentController;
+use App\Http\Controllers\AssetController;
+use App\Http\Controllers\BusinessProcessController;
 use App\Http\Controllers\Auth\EntraAuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EvidenceController;
@@ -41,6 +43,13 @@ Route::middleware(['auth', 'active-user'])->group(function (): void {
     Route::get('/organizations/{organization}/projects/{project}/evidence', EvidenceRegisterController::class)->name('evidence.index');
     Route::get('/organizations/{organization}/projects/{project}/findings', FindingRegisterController::class)->name('findings.index');
     Route::get('/organizations/{organization}/projects/{project}/measures', MeasureRegisterController::class)->name('measures.index');
+
+    Route::post('/organizations/{organization}/projects/{project}/processes', [BusinessProcessController::class, 'store'])->name('processes.store');
+    Route::put('/organizations/{organization}/projects/{project}/processes/{process}', [BusinessProcessController::class, 'update'])->name('processes.update');
+    Route::patch('/organizations/{organization}/projects/{project}/processes/{process}/status', [BusinessProcessController::class, 'status'])->name('processes.status');
+    Route::post('/organizations/{organization}/projects/{project}/assets', [AssetController::class, 'store'])->name('assets.store');
+    Route::put('/organizations/{organization}/projects/{project}/assets/{asset}', [AssetController::class, 'update'])->name('assets.update');
+    Route::patch('/organizations/{organization}/projects/{project}/assets/{asset}/status', [AssetController::class, 'status'])->name('assets.status');
 
     Route::post('/organizations/{organization}/projects/{project}/assessment', [AssessmentController::class, 'start'])->name('assessments.start');
     Route::get('/organizations/{organization}/projects/{project}/assessment', [AssessmentController::class, 'show'])->name('assessments.show');
