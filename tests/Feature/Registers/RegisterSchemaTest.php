@@ -11,6 +11,7 @@ use App\Models\BusinessProcess;
 use App\Models\DependencyEdge;
 use App\Models\IsmsProject;
 use App\Models\RegisterImportBatch;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
@@ -57,7 +58,7 @@ class RegisterSchemaTest extends TestCase
         $this->assertSame(RegisterImportStatus::Pending, $batch->fresh()?->status);
         $this->assertSame([['key' => 'ERP-1']], $batch->fresh()?->payload);
         $this->assertSame(['new' => 1], $batch->fresh()?->summary);
-        $this->assertInstanceOf(\Carbon\CarbonImmutable::class, $batch->fresh()?->expires_at);
+        $this->assertInstanceOf(CarbonImmutable::class, $batch->fresh()?->expires_at);
     }
 
     public function test_register_key_is_unique_within_its_project_but_reusable_in_another_project(): void
