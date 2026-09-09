@@ -59,8 +59,11 @@ class RegisterWorkflowTest extends TestCase
         $service = app(AssetService::class);
 
         foreach ([
-            ['name', str_repeat('a', 161)], ['description', str_repeat('a', 4001)],
-            ['owner_name', str_repeat('a', 161)], ['owner_email', 'not-an-email'], ['type', 'device'],
+            ['name', str_repeat('a', 161)],
+            ['description', str_repeat('a', 4001)],
+            ['owner_name', str_repeat('a', 161)],
+            ['owner_email', 'not-an-email'],
+            ['type', 'device'],
         ] as [$field, $value]) {
             $this->expectValidation(fn () => $service->create($project, $this->assetPayload([$field => $value]), $actor), $field);
         }
@@ -99,6 +102,11 @@ class RegisterWorkflowTest extends TestCase
 
     private function expectValidation(callable $operation, string $field): void
     {
-        try { $operation(); $this->fail('Expected validation failure.'); } catch (ValidationException $e) { $this->assertArrayHasKey($field, $e->errors()); }
+        try {
+            $operation();
+            $this->fail('Expected validation failure.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey($field, $exception->errors());
+        }
     }
 }

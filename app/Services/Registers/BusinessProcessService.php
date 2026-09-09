@@ -80,12 +80,40 @@ class BusinessProcessService
     private function validate(array $data, bool $creating): array
     {
         $rules = ['name' => ['required','string','max:160'], 'description' => ['nullable','string','max:4000'], 'owner_name' => ['nullable','string','max:160'], 'owner_email' => ['nullable','email:rfc','max:254']];
-        if ($creating) { $rules['key'] = ['required','string']; $rules['active'] = ['sometimes','boolean']; }
+        if ($creating) {
+            $rules['key'] = ['required', 'string'];
+            $rules['active'] = ['sometimes', 'boolean'];
+        }
         $validated = Validator::make($data, $rules)->validate();
         if ($creating) $validated['active'] = $validated['active'] ?? true;
         return $validated;
     }
-    private function lockedWritableProject(IsmsProject $project, User $actor): IsmsProject { $actor->loadMissing('organization'); if (! $actor->is_active || $actor->organization?->organization_type !== 'internal' || ! in_array($actor->role, [UserRole::Admin, UserRole::Consultant], true)) $this->reject('process', 'Die Aktion ist nicht zulässig.'); $locked = IsmsProject::query()->with('organization')->whereKey($project->id)->lockForUpdate()->first(); if (! $locked instanceof IsmsProject || $locked->organization?->organization_type !== 'customer' || ! $locked->organization->is_active || ! in_array($locked->status, [ProjectStatus::Draft, ProjectStatus::Active], true)) $this->reject('process', 'Das Projekt ist nicht beschreibbar.'); return $locked; }
-    private function locked(IsmsProject $project, BusinessProcess $process): BusinessProcess { $locked = BusinessProcess::query()->whereKey($process->id)->where('project_id', $project->id)->lockForUpdate()->first(); if (! $locked instanceof BusinessProcess) $this->reject('process', 'Der Prozess gehört nicht zu diesem Projekt.'); return $locked; }
-    private function reject(string $field, string $message): never { throw ValidationException::withMessages([$field => $message]); }
+    private function lockedWritableProject(IsmsProject $project, User $actor): IsmsProject
+    {
+        $actor->loadMissing('organization');
+        if (! $actor->is_active || $actor->organization?->organization_type !== 'internal' || ! in_array($actor->role, [UserRole::Admin, UserRole::Consultant], true)) {
+            $this->reject('process', 'Die Aktion ist nicht zulässig.');
+        }
+        $locked = IsmsProject::query()->with('organization')->whereKey($project->id)->lockForUpdate()->first();
+        if (! $locked instanceof IsmsProject || $locked->organization?->organization_type !== 'customer' || ! $locked->organization->is_active || ! in_array($locked->status, [ProjectStatus::Draft, ProjectStatus::Active], true)) {
+            $this->reject('process', 'Das Projekt ist nicht beschreibbar.');
+        }
+
+        return $locked;
+    }
+
+    private function locked(IsmsProject $project, BusinessProcess $process): BusinessProcess
+    {
+        $locked = BusinessProcess::query()->whereKey($process->id)->where('project_id', $project->id)->lockForUpdate()->first();
+        if (! $locked instanceof BusinessProcess) {
+            $this->reject('process', 'Der Prozess gehört nicht zu diesem Projekt.');
+        }
+
+        return $locked;
+    }
+
+    private function reject(string $field, string $message): never
+    {
+        throw ValidationException::withMessages([$field => $message]);
+    }
 }

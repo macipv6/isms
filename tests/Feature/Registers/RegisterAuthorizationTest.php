@@ -44,7 +44,10 @@ class RegisterAuthorizationTest extends TestCase
         $this->actingAs($actor)->post($this->assetUrl($organization, $project), $this->assetPayload())->assertForbidden();
     }
 
-    public static function readOnlyStates(): array { return [[false, 'draft'], [true, 'completed'], [true, 'archived']]; }
+    public static function readOnlyStates(): array
+    {
+        return [[false, 'draft'], [true, 'completed'], [true, 'archived']];
+    }
 
     public function test_nested_organization_project_and_record_substitution_return_404(): void
     {
@@ -64,8 +67,23 @@ class RegisterAuthorizationTest extends TestCase
         return [$customer, $project, $actor];
     }
 
-    private function processUrl(Organization $organization, IsmsProject $project): string { return "/organizations/{$organization->id}/projects/{$project->id}/processes"; }
-    private function assetUrl(Organization $organization, IsmsProject $project, ?Asset $asset = null): string { return "/organizations/{$organization->id}/projects/{$project->id}/assets".($asset ? "/{$asset->id}" : ''); }
-    private function processPayload(): array { return ['key' => 'SALES', 'name' => 'Sales', 'active' => true]; }
-    private function assetPayload(): array { return ['key' => 'CRM', 'name' => 'CRM', 'type' => 'application', 'active' => true]; }
+    private function processUrl(Organization $organization, IsmsProject $project): string
+    {
+        return "/organizations/{$organization->id}/projects/{$project->id}/processes";
+    }
+
+    private function assetUrl(Organization $organization, IsmsProject $project, ?Asset $asset = null): string
+    {
+        return "/organizations/{$organization->id}/projects/{$project->id}/assets".($asset ? "/{$asset->id}" : '');
+    }
+
+    private function processPayload(): array
+    {
+        return ['key' => 'SALES', 'name' => 'Sales', 'active' => true];
+    }
+
+    private function assetPayload(): array
+    {
+        return ['key' => 'CRM', 'name' => 'CRM', 'type' => 'application', 'active' => true];
+    }
 }
