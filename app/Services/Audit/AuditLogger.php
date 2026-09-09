@@ -15,6 +15,13 @@ class AuditLogger
         'project_id',
         'catalog_version',
         'question_key',
+        'evidence_id',
+        'finding_id',
+        'measure_id',
+        'old_status',
+        'new_status',
+        'link_type',
+        'failure_kind',
     ];
 
     /**

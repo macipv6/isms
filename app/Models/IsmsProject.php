@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
@@ -69,5 +70,29 @@ class IsmsProject extends Model
     public function assessment(): HasOne
     {
         return $this->hasOne(ProjectAssessment::class, 'project_id');
+    }
+
+    /**
+     * @return HasMany<EvidenceFile, $this>
+     */
+    public function evidenceFiles(): HasMany
+    {
+        return $this->hasMany(EvidenceFile::class, 'project_id');
+    }
+
+    /**
+     * @return HasMany<Finding, $this>
+     */
+    public function findings(): HasMany
+    {
+        return $this->hasMany(Finding::class, 'project_id');
+    }
+
+    /**
+     * @return HasMany<Measure, $this>
+     */
+    public function measures(): HasMany
+    {
+        return $this->hasMany(Measure::class, 'project_id');
     }
 }

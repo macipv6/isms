@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
+import QuestionEvidencePanel from '@/components/QuestionEvidencePanel.vue';
+import QuestionFindingPanel from '@/components/QuestionFindingPanel.vue';
 import type {
     AnswerValue,
     AssessmentQuestion,
@@ -234,5 +236,29 @@ function submit(): void {
                 {{ form.processing ? 'Speichert …' : 'Antwort speichern' }}
             </button>
         </form>
+
+        <div class="mt-6 grid gap-4 xl:grid-cols-2">
+            <QuestionEvidencePanel
+                :key="
+                    question.work_items.linked_evidence
+                        .map((evidence) => evidence.id)
+                        .join('-')
+                "
+                :work-items="question.work_items"
+            />
+            <QuestionFindingPanel
+                :key="
+                    question.work_items.findings
+                        .flatMap((finding) => [
+                            finding.id,
+                            ...finding.measures.items.map(
+                                (measure) => measure.id,
+                            ),
+                        ])
+                        .join('-')
+                "
+                :work-items="question.work_items"
+            />
+        </div>
     </article>
 </template>

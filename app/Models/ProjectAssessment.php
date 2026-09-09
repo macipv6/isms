@@ -8,6 +8,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property AssessmentStatus $status
+ */
 class ProjectAssessment extends Model
 {
     use HasUuids;
@@ -70,5 +73,13 @@ class ProjectAssessment extends Model
     public function answers(): HasMany
     {
         return $this->hasMany(ProjectAnswer::class, 'project_assessment_id');
+    }
+
+    /**
+     * @return HasMany<Finding, $this>
+     */
+    public function findings(): HasMany
+    {
+        return $this->hasMany(Finding::class, 'project_assessment_id');
     }
 }

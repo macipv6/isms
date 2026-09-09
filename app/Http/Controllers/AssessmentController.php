@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\AssessmentQuestion;
+use App\Models\EvidenceFile;
+use App\Models\Finding;
 use App\Models\IsmsProject;
 use App\Models\Organization;
 use App\Models\User;
@@ -10,6 +12,8 @@ use App\Services\Assessment\ApplicabilityEvaluator;
 use App\Services\Assessment\AssessmentProgress;
 use App\Services\Assessment\AssessmentStarter;
 use App\Services\Audit\AuditLogger;
+use App\Services\WorkItems\QuestionWorkItemPresenter;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -55,12 +59,29 @@ class AssessmentController extends Controller
         IsmsProject $project,
         ApplicabilityEvaluator $evaluator,
         AssessmentProgress $progress,
+        QuestionWorkItemPresenter $workItems,
     ): Response {
         $this->ensureOwnership($organization, $project);
         Gate::authorize('viewAssessment', $project);
 
         $assessment = $project->assessment()->firstOrFail();
-        $questions = $evaluator->applicableQuestions($assessment);
+        /** @var EloquentCollection<int, AssessmentQuestion> $questions */
+        $questions = new EloquentCollection($evaluator->applicableQuestions($assessment)->all());
+        $project->loadMissing(['organization', 'evidenceFiles']);
+        $assessment->loadMissing('answers.question');
+        $assessment->setRelation('project', $project);
+        $questions->each(function (AssessmentQuestion $question) use ($assessment): void {
+            $question->setRelation('assessment', $assessment);
+        });
+        $questions->load([
+            'answer',
+            'evidenceFiles',
+            'findings' => fn ($query) => $query->latest('proposed_at'),
+            'findings.evidenceFiles',
+            'findings.measures',
+        ]);
+        $canManage = Gate::allows('upload', [EvidenceFile::class, $project])
+            && Gate::allows('propose', [Finding::class, $project]);
         $categories = [];
 
         foreach ($questions->groupBy('category_key') as $categoryQuestions) {
@@ -70,7 +91,7 @@ class AssessmentController extends Controller
                 'key' => $first->category_key,
                 'name' => $first->category_name,
                 'questions' => $categoryQuestions
-                    ->map(fn (AssessmentQuestion $question): array => $this->questionData($question))
+                    ->map(fn (AssessmentQuestion $question): array => $this->questionData($question, $workItems, $canManage))
                     ->values()
                     ->all(),
             ];
@@ -89,7 +110,7 @@ class AssessmentController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function questionData(AssessmentQuestion $question): array
+    private function questionData(AssessmentQuestion $question, QuestionWorkItemPresenter $workItems, bool $canManage): array
     {
         $answer = $question->answer;
 
@@ -106,6 +127,7 @@ class AssessmentController extends Controller
             'answer' => $answer?->valueForRules(),
             'compliance_status' => $answer?->compliance_status->value,
             'comment' => $answer?->comment,
+            'work_items' => $workItems->for($question, $canManage),
         ];
     }
 

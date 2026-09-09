@@ -3,6 +3,7 @@ import { Head, Link, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import AssessmentProgress from '@/components/AssessmentProgress.vue';
 import AssessmentQuestionCard from '@/components/AssessmentQuestionCard.vue';
+import ProjectWorkNavigation from '@/components/ProjectWorkNavigation.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import type {
     AssessmentCategory,
@@ -28,7 +29,14 @@ interface AssessmentPageProps {
 
 const page = usePage<AssessmentPageProps>();
 
-const selectedKey = ref(props.categories[0]?.key ?? '');
+const questionIdFromHash =
+    typeof window === 'undefined'
+        ? null
+        : window.location.hash.match(/^#question-(.+)$/)?.[1];
+const linkedCategory = props.categories.find((category) =>
+    category.questions.some((question) => question.id === questionIdFromHash),
+);
+const selectedKey = ref(linkedCategory?.key ?? props.categories[0]?.key ?? '');
 const selectedCategory = computed(
     () =>
         props.categories.find(
@@ -76,6 +84,12 @@ watch(
             </div>
         </div>
 
+        <ProjectWorkNavigation
+            :organization-id="organization.id"
+            :project-id="project.id"
+            active="assessment"
+        />
+
         <AssessmentProgress :progress="progress" class="mt-8" />
 
         <p
@@ -113,14 +127,19 @@ watch(
                     {{ selectedCategory.name }}
                 </h2>
                 <div class="mt-5 space-y-5">
-                    <AssessmentQuestionCard
+                    <div
                         v-for="question in selectedCategory.questions"
                         :key="question.id"
-                        :organization-id="organization.id"
-                        :project-id="project.id"
-                        :question="question"
-                        :can-answer="canAnswer"
-                    />
+                        :id="'question-' + question.id"
+                        class="scroll-mt-6"
+                    >
+                        <AssessmentQuestionCard
+                            :organization-id="organization.id"
+                            :project-id="project.id"
+                            :question="question"
+                            :can-answer="canAnswer"
+                        />
+                    </div>
                 </div>
             </section>
         </div>
