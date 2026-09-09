@@ -49,7 +49,7 @@ class AssetService
         return DB::transaction(function () use ($asset, $data, $actor, $expectedUpdatedAt, $audit): Asset {
             $project = $this->project($asset->project, $actor);
             $locked = $this->locked($project, $asset);
-            if (! $locked->updated_at->equalTo(CarbonImmutable::parse($expectedUpdatedAt))) {
+            if ($locked->updated_at->getTimestamp() !== CarbonImmutable::parse($expectedUpdatedAt)->getTimestamp()) {
                 $this->reject('updated_at', 'Der Datensatz wurde zwischenzeitlich geändert.');
             }
             $locked->fill($data);

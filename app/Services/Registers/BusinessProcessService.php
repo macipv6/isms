@@ -47,7 +47,7 @@ class BusinessProcessService
         return DB::transaction(function () use ($process, $data, $actor, $expectedUpdatedAt, $audit): BusinessProcess {
             $project = $this->lockedWritableProject($process->project, $actor);
             $locked = $this->locked($project, $process);
-            if (! $locked->updated_at->equalTo(CarbonImmutable::parse($expectedUpdatedAt))) {
+            if ($locked->updated_at->getTimestamp() !== CarbonImmutable::parse($expectedUpdatedAt)->getTimestamp()) {
                 $this->reject('updated_at', 'Der Datensatz wurde zwischenzeitlich geändert.');
             }
             $locked->fill($data);
