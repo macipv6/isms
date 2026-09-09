@@ -8,6 +8,7 @@ use App\Models\BusinessProcess;
 use App\Models\IsmsProject;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
@@ -46,7 +47,7 @@ class BusinessProcessService
         return DB::transaction(function () use ($process, $data, $actor, $expectedUpdatedAt, $audit): BusinessProcess {
             $project = $this->lockedWritableProject($process->project, $actor);
             $locked = $this->locked($project, $process);
-            if ($locked->updated_at->toIso8601String() !== $expectedUpdatedAt) {
+            if (! $locked->updated_at->equalTo(CarbonImmutable::parse($expectedUpdatedAt))) {
                 $this->reject('updated_at', 'Der Datensatz wurde zwischenzeitlich geändert.');
             }
             $locked->fill($data);

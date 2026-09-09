@@ -9,6 +9,7 @@ use App\Models\Asset;
 use App\Models\IsmsProject;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -48,7 +49,7 @@ class AssetService
         return DB::transaction(function () use ($asset, $data, $actor, $expectedUpdatedAt, $audit): Asset {
             $project = $this->project($asset->project, $actor);
             $locked = $this->locked($project, $asset);
-            if ($locked->updated_at->toIso8601String() !== $expectedUpdatedAt) {
+            if (! $locked->updated_at->equalTo(CarbonImmutable::parse($expectedUpdatedAt))) {
                 $this->reject('updated_at', 'Der Datensatz wurde zwischenzeitlich geändert.');
             }
             $locked->fill($data);

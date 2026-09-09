@@ -52,7 +52,7 @@ class RegisterAuthorizationTest extends TestCase
     {
         [$organization, $project, $actor] = $this->context();
         [$foreignOrganization, $foreignProject] = $this->context();
-        $asset = Asset::factory()->for($foreignProject)->create();
+        $asset = Asset::factory()->for($foreignProject, 'project')->create();
         $this->actingAs($actor)->post($this->processUrl($foreignOrganization, $project), $this->processPayload())->assertNotFound();
         $this->actingAs($actor)->put($this->assetUrl($organization, $project, $asset), $this->assetPayload())->assertNotFound();
     }
