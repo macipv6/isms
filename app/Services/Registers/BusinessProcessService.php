@@ -21,6 +21,7 @@ class BusinessProcessService
     {
         $data = $this->validate($attributes, true);
         $data['key'] = RegisterKey::normalize($data['key']);
+
         return DB::transaction(function () use ($project, $data, $actor, $audit): BusinessProcess {
             $lockedProject = $this->lockedWritableProject($project, $actor);
             if (BusinessProcess::query()->where('project_id', $lockedProject->id)->where('key', $data['key'])->exists()) {
@@ -32,6 +33,7 @@ class BusinessProcessService
             if ($audit) {
                 $this->audit->record('business_process.created', $actor, ['project_id' => $lockedProject->id, 'business_process_id' => $process->id, 'key' => $process->key], $lockedProject->organization_id);
             }
+
             return $process;
         });
     }
@@ -40,6 +42,7 @@ class BusinessProcessService
     public function update(BusinessProcess $process, array $attributes, User $actor, string $expectedUpdatedAt, bool $audit = true): BusinessProcess
     {
         $data = $this->validate($attributes, false);
+
         return DB::transaction(function () use ($process, $data, $actor, $expectedUpdatedAt, $audit): BusinessProcess {
             $project = $this->lockedWritableProject($process->project, $actor);
             $locked = $this->locked($project, $process);
@@ -55,6 +58,7 @@ class BusinessProcessService
             if ($audit) {
                 $this->audit->record('business_process.updated', $actor, ['project_id' => $project->id, 'business_process_id' => $locked->id, 'key' => $locked->key, 'changed_fields' => $changed], $project->organization_id);
             }
+
             return $locked;
         });
     }
@@ -72,14 +76,12 @@ class BusinessProcessService
             if ($audit) {
                 $this->audit->record('business_process.status_changed', $actor, ['project_id' => $project->id, 'business_process_id' => $locked->id, 'key' => $locked->key, 'old_active' => $old ? 'true' : 'false', 'new_active' => $active ? 'true' : 'false'], $project->organization_id);
             }
+
             return $locked;
         });
     }
 
-    /**
-     * @param  array<string, mixed>  $data
-     * @return array<string, mixed>
-     */
+    /** @param array<string, mixed> $data @return array<string, mixed> */
     private function validate(array $data, bool $creating): array
     {
         $rules = ['name' => ['required', 'string', 'max:160'], 'description' => ['nullable', 'string', 'max:4000'], 'owner_name' => ['nullable', 'string', 'max:160'], 'owner_email' => ['nullable', 'email:rfc', 'max:254']];
