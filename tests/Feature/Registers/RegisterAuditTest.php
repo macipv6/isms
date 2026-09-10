@@ -44,8 +44,15 @@ class RegisterAuditTest extends TestCase
                 throw new RuntimeException('audit unavailable');
             }
         });
-        $this->expectException(RuntimeException::class);
-        app(BusinessProcessService::class)->create($project, ['key' => 'SALES', 'name' => 'Sales', 'active' => true], $actor);
+        try {
+            app(BusinessProcessService::class)->create($project, ['key' => 'SALES', 'name' => 'Sales', 'active' => true], $actor);
+            $this->fail('Expected audit failure.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('audit unavailable', $exception->getMessage());
+        }
+
+        $this->assertDatabaseCount('business_processes', 0);
+        $this->assertDatabaseCount('audit_events', 0);
     }
 
     private function context(): array
