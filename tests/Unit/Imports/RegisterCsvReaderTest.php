@@ -71,11 +71,11 @@ class RegisterCsvReaderTest extends TestCase
     public function it_enforces_ten_thousand_data_rows_but_scans_the_next_row(): void
     {
         $header = "key,name,description,owner_name,owner_email,active\n";
-        $row = "PR-1,Process,,,,true\n";
-        $accepted = app(RegisterCsvReader::class)->read($this->upload('processes.csv', $header.str_repeat($row, 10000)), RegisterImportKind::Processes);
+        $rows = implode('', array_map(static fn (int $number): string => sprintf("PR-%05d,Process,,,,true\n", $number), range(1, 10001)));
+        $accepted = app(RegisterCsvReader::class)->read($this->upload('processes.csv', substr($rows, 0, strlen($rows) - strlen(sprintf("PR-%05d,Process,,,,true\n", 10001)))), RegisterImportKind::Processes);
         $this->assertCount(10000, $accepted->rows);
 
-        $this->assertFileRejected($this->upload('processes.csv', $header.str_repeat($row, 10001)));
+        $this->assertFileRejected($this->upload('processes.csv', $header.$rows));
     }
 
     #[DataProvider('formulaCells')]
