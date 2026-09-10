@@ -24,7 +24,7 @@ class RegisterCsvReader
             $this->fileRejected();
         }
 
-        $input = @ fopen($file->getPathname(), 'rb');
+        $input = @fopen($file->getPathname(), 'rb');
         $temporary = tmpfile();
         if ($input === false || $temporary === false) {
             $this->fileRejected();
