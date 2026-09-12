@@ -75,11 +75,13 @@ class RegisterCsvReader
                 $rowCount++;
                 if ($rowCount > self::MAX_ROWS) {
                     $this->addError($errors, 'file', 'Die hochgeladene Datei ist nicht zulässig.');
+
                     continue;
                 }
 
                 if (count($record) !== count($headers)) {
                     $this->addError($errors, 'rows.'.$startLine.'.row', 'Die CSV-Zeile ist nicht zulässig.');
+
                     continue;
                 }
 
