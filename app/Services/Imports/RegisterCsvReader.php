@@ -20,7 +20,8 @@ class RegisterCsvReader
 
     public function read(UploadedFile $file, RegisterImportKind $kind): ParsedRegisterCsv
     {
-        if (! $file->isValid() || ($file->getSize() !== null && $file->getSize() > self::MAX_BYTES)) {
+        $size = $file->getSize();
+        if (! $file->isValid() || $size === false || $size > self::MAX_BYTES) {
             $this->fileRejected();
         }
 
@@ -116,6 +117,9 @@ class RegisterCsvReader
         }
     }
 
+    /**
+     * @param  resource  $stream
+     */
     private function detectDelimiter($stream, RegisterImportKind $kind): string
     {
         $valid = [];
@@ -135,6 +139,7 @@ class RegisterCsvReader
     }
 
     /**
+     * @param  resource  $stream
      * @return list<string>|null
      */
     private function readRecord($stream, string $delimiter): ?array
@@ -163,6 +168,9 @@ class RegisterCsvReader
         return count($headers) === count($expected) && count(array_unique($headers)) === count($headers) && count(array_diff($headers, $expected)) === 0;
     }
 
+    /**
+     * @param  resource  $stream
+     */
     private function isUtf8($stream): bool
     {
         rewind($stream);
@@ -189,6 +197,9 @@ class RegisterCsvReader
         return preg_match('//u', $carry) === 1;
     }
 
+    /**
+     * @param  resource  $stream
+     */
     private function hasWellFormedQuoting($stream): bool
     {
         rewind($stream);
