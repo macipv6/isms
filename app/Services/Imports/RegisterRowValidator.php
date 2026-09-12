@@ -16,9 +16,20 @@ class RegisterRowValidator
     /** @param array<string, mixed> $row */
     public function validate(RegisterImportKind $kind, array $row, int $line): RegisterCsvRow
     {
+        $expectedFields = $this->headers($kind);
+        $missingFields = array_diff($expectedFields, array_keys($row));
+        if ($missingFields !== []) {
+            $this->reject($line, array_values($missingFields)[0]);
+        }
+
+        $unexpectedFields = array_diff(array_keys($row), $expectedFields);
+        if ($unexpectedFields !== []) {
+            $this->reject($line, array_values($unexpectedFields)[0]);
+        }
+
         $values = [];
-        foreach ($this->headers($kind) as $field) {
-            $value = $row[$field] ?? null;
+        foreach ($expectedFields as $field) {
+            $value = $row[$field];
             $values[$field] = is_string($value) ? trim($value) : $value;
             if (is_string($values[$field]) && $values[$field] !== '' && in_array($values[$field][0], ['=', '+', '-', '@'], true)) {
                 $this->reject($line, $field);
@@ -31,17 +42,21 @@ class RegisterRowValidator
             }
         }
 
-        try {
-            if (isset($values['key'])) {
+        if (isset($values['key'])) {
+            try {
                 $values['key'] = RegisterKey::normalize((string) $values['key']);
+            } catch (ValidationException) {
+                $this->reject($line, 'key');
             }
-            foreach (['source_key', 'target_key'] as $field) {
-                if (isset($values[$field])) {
+        }
+        foreach (['source_key', 'target_key'] as $field) {
+            if (isset($values[$field])) {
+                try {
                     $values[$field] = RegisterKey::normalize((string) $values[$field]);
+                } catch (ValidationException) {
+                    $this->reject($line, $field);
                 }
             }
-        } catch (ValidationException $exception) {
-            $this->rethrow($exception, $line);
         }
 
         foreach (['active'] as $field) {
@@ -112,8 +127,8 @@ class RegisterRowValidator
     private function rethrow(ValidationException $exception, int $line): never
     {
         $errors = [];
-        foreach ($exception->errors() as $field => $messages) {
-            $errors['rows.'.$line.'.'.$field] = $messages;
+        foreach ($exception->errors() as $field => $_messages) {
+            $errors['rows.'.$line.'.'.$field] = ['Die CSV-Zeile ist nicht zulässig.'];
         }
         throw ValidationException::withMessages($errors);
     }

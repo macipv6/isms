@@ -49,11 +49,15 @@ class RegisterCsvReader
                 fwrite($temporary, $chunk);
             }
 
-            if ($bytes === 0 || ! $this->isUtf8($temporary) || ! $this->hasWellFormedQuoting($temporary)) {
+            if ($bytes === 0 || ! $this->isUtf8($temporary)) {
                 $this->fileRejected();
             }
 
             $delimiter = $this->detectDelimiter($temporary, $kind);
+            if (! $this->hasWellFormedQuoting($temporary, $delimiter)) {
+                $this->fileRejected();
+            }
+
             rewind($temporary);
             $headers = $this->readRecord($temporary, $delimiter);
             if ($headers === null) {
@@ -76,8 +80,6 @@ class RegisterCsvReader
                 $rowCount++;
                 if ($rowCount > self::MAX_ROWS) {
                     $this->addError($errors, 'file', 'Die hochgeladene Datei ist nicht zulässig.');
-
-                    continue;
                 }
 
                 if (count($record) !== count($headers)) {
@@ -93,7 +95,9 @@ class RegisterCsvReader
                         $this->addError($errors, 'rows.'.$startLine.'.'.$this->duplicateField($kind), 'Die CSV-Zeile ist nicht zulässig.');
                     } else {
                         $seen[$identifier] = true;
-                        $rows[] = $row;
+                        if ($rowCount <= self::MAX_ROWS) {
+                            $rows[] = $row;
+                        }
                     }
                 } catch (ValidationException $exception) {
                     foreach ($exception->errors() as $field => $messages) {
@@ -155,7 +159,11 @@ class RegisterCsvReader
      */
     private function normalizeHeaders(array $headers): array
     {
-        return array_map(static fn (string $header): string => strtolower(trim(preg_replace('/^\xEF\xBB\xBF/', '', $header) ?? $header)), $headers);
+        if (isset($headers[0])) {
+            $headers[0] = preg_replace('/^\xEF\xBB\xBF/', '', $headers[0]) ?? $headers[0];
+        }
+
+        return array_map(static fn (string $header): string => strtolower($header), $headers);
     }
 
     /**
@@ -200,7 +208,7 @@ class RegisterCsvReader
     /**
      * @param  resource  $stream
      */
-    private function hasWellFormedQuoting($stream): bool
+    private function hasWellFormedQuoting($stream, string $delimiter): bool
     {
         rewind($stream);
         $state = 'start';
@@ -224,7 +232,7 @@ class RegisterCsvReader
                     continue;
                 }
 
-                if ($byte === ',' || $byte === ';') {
+                if ($byte === $delimiter) {
                     $state = 'start';
 
                     continue;
@@ -249,7 +257,7 @@ class RegisterCsvReader
                 return false;
             }
 
-            $state = ($byte === ',' || $byte === ';' || $byte === "\r" || $byte === "\n") ? 'start' : 'plain';
+            $state = ($byte === $delimiter || $byte === "\r" || $byte === "\n") ? 'start' : 'plain';
         }
 
         return $state !== 'quoted';
