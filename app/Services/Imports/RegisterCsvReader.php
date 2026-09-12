@@ -3,7 +3,6 @@
 namespace App\Services\Imports;
 
 use App\Data\Imports\ParsedRegisterCsv;
-use App\Data\Imports\RegisterCsvRow;
 use App\Enums\RegisterImportKind;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Validation\ValidationException;
@@ -88,16 +87,21 @@ class RegisterCsvReader
                     continue;
                 }
 
-                try {
-                    $row = $this->rowValidator->validate($kind, array_combine($headers, $record) ?: [], $startLine);
-                    $identifier = $this->identifier($kind, $row);
-                    if (isset($seen[$identifier])) {
+                $values = array_combine($headers, $record) ?: [];
+                $identifier = $this->rowValidator->identifier($kind, $values);
+                $duplicate = $identifier !== null && isset($seen[$identifier]);
+                if ($identifier !== null) {
+                    if ($duplicate) {
                         $this->addError($errors, 'rows.'.$startLine.'.'.$this->duplicateField($kind), 'Die CSV-Zeile ist nicht zulässig.');
                     } else {
                         $seen[$identifier] = true;
-                        if ($rowCount <= self::MAX_ROWS) {
-                            $rows[] = $row;
-                        }
+                    }
+                }
+
+                try {
+                    $row = $this->rowValidator->validate($kind, $values, $startLine);
+                    if (! $duplicate && $rowCount <= self::MAX_ROWS) {
+                        $rows[] = $row;
                     }
                 } catch (ValidationException $exception) {
                     foreach ($exception->errors() as $field => $messages) {
@@ -277,13 +281,6 @@ class RegisterCsvReader
     private function recordLines(array $record): int
     {
         return substr_count(implode('', $record), "\n");
-    }
-
-    private function identifier(RegisterImportKind $kind, RegisterCsvRow $row): string
-    {
-        return $kind === RegisterImportKind::Dependencies
-            ? implode('|', [(string) $row->values['source_type'], (string) $row->values['source_key'], (string) $row->values['target_type'], (string) $row->values['target_key']])
-            : (string) $row->values['key'];
     }
 
     private function duplicateField(RegisterImportKind $kind): string

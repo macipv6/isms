@@ -96,6 +96,37 @@ class RegisterRowValidator
         return new RegisterCsvRow($line, $values);
     }
 
+    /** @param array<string, mixed> $row */
+    public function identifier(RegisterImportKind $kind, array $row): ?string
+    {
+        try {
+            if ($kind !== RegisterImportKind::Dependencies) {
+                return isset($row['key']) && is_string($row['key'])
+                    ? RegisterKey::normalize($row['key'])
+                    : null;
+            }
+
+            $sourceType = isset($row['source_type']) && is_string($row['source_type'])
+                ? DependencyNodeType::tryFrom(trim($row['source_type']))
+                : null;
+            $targetType = isset($row['target_type']) && is_string($row['target_type'])
+                ? DependencyNodeType::tryFrom(trim($row['target_type']))
+                : null;
+            if ($sourceType === null || $targetType === null || ! isset($row['source_key'], $row['target_key']) || ! is_string($row['source_key']) || ! is_string($row['target_key'])) {
+                return null;
+            }
+
+            return implode('|', [
+                $sourceType->value,
+                RegisterKey::normalize($row['source_key']),
+                $targetType->value,
+                RegisterKey::normalize($row['target_key']),
+            ]);
+        } catch (ValidationException) {
+            return null;
+        }
+    }
+
     /** @return list<string> */
     public function headers(RegisterImportKind $kind): array
     {
