@@ -24,7 +24,7 @@ class RegisterCsvReaderTest extends TestCase
         $this->assertSame(['active', 'owner_email', 'name', 'key', 'type', 'description', 'owner_name'], $parsed->headers);
         $this->assertCount(1, $parsed->rows);
         $this->assertSame(2, $parsed->rows[0]->line);
-        $this->assertSame('app-1', $parsed->rows[0]->values['key']);
+        $this->assertSame('APP-1', $parsed->rows[0]->values['key']);
         $this->assertSame("erste\r\nzweite", $parsed->rows[0]->values['description']);
     }
 
@@ -72,7 +72,7 @@ class RegisterCsvReaderTest extends TestCase
     {
         $header = "key,name,description,owner_name,owner_email,active\n";
         $rows = implode('', array_map(static fn (int $number): string => sprintf("PR-%05d,Process,,,,true\n", $number), range(1, 10001)));
-        $accepted = app(RegisterCsvReader::class)->read($this->upload('processes.csv', substr($rows, 0, strlen($rows) - strlen(sprintf("PR-%05d,Process,,,,true\n", 10001)))), RegisterImportKind::Processes);
+        $accepted = app(RegisterCsvReader::class)->read($this->upload('processes.csv', $header.substr($rows, 0, strlen($rows) - strlen(sprintf("PR-%05d,Process,,,,true\n", 10001)))), RegisterImportKind::Processes);
         $this->assertCount(10000, $accepted->rows);
 
         $this->assertFileRejected($this->upload('processes.csv', $header.$rows));
