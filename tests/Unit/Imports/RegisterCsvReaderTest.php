@@ -116,6 +116,23 @@ class RegisterCsvReaderTest extends TestCase
     }
 
     #[Test]
+    public function it_tracks_a_normalized_identifier_even_when_its_first_row_has_an_unrelated_error(): void
+    {
+        $header = "key,name,description,owner_name,owner_email,active\n";
+        $rows = implode('', array_map(static fn (int $number): string => sprintf("PR-%05d,Process,,,,true\n", $number), range(1, 10000)));
+        $rows .= " pr-10001 ,=Formula,,,,true\n";
+        $rows .= "PR-10001,Duplicate,,,,true\n";
+
+        try {
+            app(RegisterCsvReader::class)->read($this->upload('processes.csv', $header.$rows), RegisterImportKind::Processes);
+            $this->fail('The oversized CSV file was accepted.');
+        } catch (ValidationException $exception) {
+            $this->assertSame(['Die CSV-Zeile ist nicht zulässig.'], $exception->errors()['rows.10002.name']);
+            $this->assertSame(['Die CSV-Zeile ist nicht zulässig.'], $exception->errors()['rows.10003.key']);
+        }
+    }
+
+    #[Test]
     public function it_caps_displayed_errors_at_two_hundred(): void
     {
         $header = "key,name,description,owner_name,owner_email,active\n";
