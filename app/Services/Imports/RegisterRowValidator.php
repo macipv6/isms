@@ -32,7 +32,9 @@ class RegisterRowValidator
         }
 
         try {
-            $values['key'] = isset($values['key']) ? RegisterKey::normalize((string) $values['key']) : null;
+            if (isset($values['key'])) {
+                $values['key'] = RegisterKey::normalize((string) $values['key']);
+            }
             foreach (['source_key', 'target_key'] as $field) {
                 if (isset($values[$field])) {
                     $values[$field] = RegisterKey::normalize((string) $values[$field]);
