@@ -41,11 +41,29 @@ class RegisterCsvReaderTest extends TestCase
             'unknown header' => ["key,name,type,description,owner_name,owner_email,active,extra\nAPP-1,ERP,application,,,,true\n"],
             'duplicate header' => ["key,name,type,description,owner_name,owner_email,active,key\nAPP-1,ERP,application,,,,true,APP-1\n"],
             'missing header' => ["key,name,type,description,owner_name,active\nAPP-1,ERP,application,,,true\n"],
-            'ambiguous delimiter' => ["key,name,type,description,owner_name,owner_email,active;key,name,type,description,owner_name,owner_email,active\nAPP-1,ERP,application,,,,true\n"],
+            'mixed delimiters' => ["key,name,type,description,owner_name,owner_email,active;key,name,type,description,owner_name,owner_email,active\nAPP-1,ERP,application,,,,true\n"],
             'malformed quote' => ["key,name,type,description,owner_name,owner_email,active\nAPP-1,\"ERP,application,,,,true\n"],
             'invalid utf8' => ["key,name,type,description,owner_name,owner_email,active\nAPP-1,\xFF,application,,,,true\n"],
             'nul byte' => ["key,name,type,description,owner_name,owner_email,active\nAPP-1,ERP\0,application,,,,true\n"],
             'blank body' => ["key,name,type,description,owner_name,owner_email,active\n\r\n \r\n"],
+            'leading header whitespace' => [" key,name,type,description,owner_name,owner_email,active\nAPP-1,ERP,application,,,,true\n"],
+            'trailing header whitespace' => ["key ,name,type,description,owner_name,owner_email,active\nAPP-1,ERP,application,,,,true\n"],
+            'bom outside file start' => ["key,\xEF\xBB\xBFname,type,description,owner_name,owner_email,active\nAPP-1,ERP,application,,,,true\n"],
+        ];
+    }
+
+    #[DataProvider('invalidPostQuoteContents')]
+    public function test_it_rejects_characters_after_a_closing_quote_unless_they_are_the_selected_delimiter(string $contents): void
+    {
+        $this->assertFileRejected($this->upload('assets.csv', $contents));
+    }
+
+    /** @return array<string, array{string}> */
+    public static function invalidPostQuoteContents(): array
+    {
+        return [
+            'semicolon after quoted comma field' => ["key,name,type,description,owner_name,owner_email,active\nAPP-1,\"ERP\";suffix,application,,,,true\n"],
+            'comma after quoted semicolon field' => ["key;name;type;description;owner_name;owner_email;active\nAPP-1;\"ERP\",suffix;application;;;;true\n"],
         ];
     }
 
@@ -76,6 +94,41 @@ class RegisterCsvReaderTest extends TestCase
         $this->assertCount(10000, $accepted->rows);
 
         $this->assertFileRejected($this->upload('processes.csv', $header.$rows));
+    }
+
+    #[Test]
+    public function it_continues_validation_and_duplicate_detection_after_the_row_limit(): void
+    {
+        $header = "key,name,description,owner_name,owner_email,active\n";
+        $rows = implode('', array_map(static fn (int $number): string => sprintf("PR-%05d,Process,,,,true\n", $number), range(1, 10000)));
+        $rows .= "PR-00001,Duplicate,,,,true\n";
+        $rows .= "PR-10002,=Formula,,,,true\n";
+
+        try {
+            app(RegisterCsvReader::class)->read($this->upload('processes.csv', $header.$rows), RegisterImportKind::Processes);
+            $this->fail('The oversized CSV file was accepted.');
+        } catch (ValidationException $exception) {
+            $this->assertSame(['Die hochgeladene Datei ist nicht zulässig.'], $exception->errors()['file']);
+            $this->assertSame(['Die CSV-Zeile ist nicht zulässig.'], $exception->errors()['rows.10002.key']);
+            $this->assertSame(['Die CSV-Zeile ist nicht zulässig.'], $exception->errors()['rows.10003.name']);
+            $this->assertLessThanOrEqual(200, count($exception->errors()));
+        }
+    }
+
+    #[Test]
+    public function it_caps_displayed_errors_at_two_hundred(): void
+    {
+        $header = "key,name,description,owner_name,owner_email,active\n";
+        $rows = implode('', array_map(static fn (int $number): string => sprintf("PR-%05d,=Formula,,,,true\n", $number), range(1, 201)));
+
+        try {
+            app(RegisterCsvReader::class)->read($this->upload('processes.csv', $header.$rows), RegisterImportKind::Processes);
+            $this->fail('The unsafe CSV rows were accepted.');
+        } catch (ValidationException $exception) {
+            $this->assertCount(200, $exception->errors());
+            $this->assertArrayHasKey('rows.201.name', $exception->errors());
+            $this->assertArrayNotHasKey('rows.202.name', $exception->errors());
+        }
     }
 
     #[DataProvider('formulaCells')]

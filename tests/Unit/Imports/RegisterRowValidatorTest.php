@@ -26,6 +26,60 @@ class RegisterRowValidatorTest extends TestCase
         $this->assertSame(['source_type' => 'process', 'source_key' => 'PR-1', 'target_type' => 'asset', 'target_key' => 'APP-1', 'importance' => 'critical', 'reason' => 'hosted', 'active' => true], $row->values);
     }
 
+    #[DataProvider('invalidDependencyKeys')]
+    public function test_it_reports_invalid_dependency_keys_at_their_exact_csv_fields(string $field): void
+    {
+        $row = ['source_type' => 'process', 'source_key' => 'PR-1', 'target_type' => 'asset', 'target_key' => 'APP-1', 'importance' => 'supporting', 'reason' => '', 'active' => 'true'];
+        $row[$field] = 'x';
+
+        try {
+            app(RegisterRowValidator::class)->validate(RegisterImportKind::Dependencies, $row, 9);
+            $this->fail('The invalid dependency key was accepted.');
+        } catch (ValidationException $exception) {
+            $this->assertSame(['Die CSV-Zeile ist nicht zulässig.'], $exception->errors()['rows.9.'.$field]);
+        }
+    }
+
+    /** @return array<string, array{string}> */
+    public static function invalidDependencyKeys(): array
+    {
+        return [
+            'source key' => ['source_key'],
+            'target key' => ['target_key'],
+        ];
+    }
+
+    #[DataProvider('nonCanonicalRows')]
+    public function test_it_rejects_rows_that_do_not_have_the_exact_columns(RegisterImportKind $kind, array $row, string $field): void
+    {
+        try {
+            app(RegisterRowValidator::class)->validate($kind, $row, 14);
+            $this->fail('The non-canonical register row was accepted.');
+        } catch (ValidationException $exception) {
+            $this->assertSame(['Die CSV-Zeile ist nicht zulässig.'], $exception->errors()['rows.14.'.$field]);
+        }
+    }
+
+    /** @return array<string, array{RegisterImportKind, array<string, string>, string}> */
+    public static function nonCanonicalRows(): array
+    {
+        $process = ['key' => 'PR-1', 'name' => 'Process', 'description' => '', 'owner_name' => '', 'owner_email' => '', 'active' => 'true'];
+        $asset = ['key' => 'APP-1', 'name' => 'Asset', 'type' => 'application', 'description' => '', 'owner_name' => '', 'owner_email' => '', 'active' => 'true'];
+        $dependency = ['source_type' => 'process', 'source_key' => 'PR-1', 'target_type' => 'asset', 'target_key' => 'APP-1', 'importance' => 'supporting', 'reason' => '', 'active' => 'true'];
+
+        $processWithoutKey = $process;
+        unset($processWithoutKey['key']);
+        $assetWithoutActive = $asset;
+        unset($assetWithoutActive['active']);
+        $dependencyWithExtra = [...$dependency, 'name' => 'unexpected'];
+
+        return [
+            'missing required process key' => [RegisterImportKind::Processes, $processWithoutKey, 'key'],
+            'missing required asset active flag' => [RegisterImportKind::Assets, $assetWithoutActive, 'active'],
+            'unexpected dependency column' => [RegisterImportKind::Dependencies, $dependencyWithExtra, 'name'],
+        ];
+    }
+
     #[DataProvider('invalidRows')]
     public function test_it_rejects_invalid_domain_values_with_stable_row_coordinates(RegisterImportKind $kind, array $row, string $field): void
     {
@@ -34,6 +88,7 @@ class RegisterRowValidatorTest extends TestCase
             $this->fail('The invalid register row was accepted.');
         } catch (ValidationException $exception) {
             $this->assertArrayHasKey('rows.12.'.$field, $exception->errors());
+            $this->assertSame(['Die CSV-Zeile ist nicht zulässig.'], $exception->errors()['rows.12.'.$field]);
         }
     }
 
