@@ -43,9 +43,9 @@ class RegisterImportConfirmer
                 $project = $this->lockedWritableProject($lockedBatch);
                 $rows = $this->canonicalRows($lockedBatch);
                 $existing = $this->lockedExisting($project, $lockedBatch->kind, $rows);
-                [$counts, $categoriesByKey] = $this->classify($lockedBatch->kind, $rows, $existing);
+                $counts = $this->counts($lockedBatch->kind, $rows, $existing);
                 if (! $this->sameCounts($counts, $lockedBatch->summary['counts'] ?? null)
-                    || ! $this->sameFingerprint($categoriesByKey, $lockedBatch->summary['state_fingerprint'] ?? null)) {
+                    || ! $this->sameFingerprint($lockedBatch->kind, $rows, $existing, $lockedBatch->summary['state_fingerprint'] ?? null)) {
                     $this->reject();
                 }
 
@@ -161,12 +161,11 @@ class RegisterImportConfirmer
     /**
      * @param  list<array<string, string|bool|null>>  $rows
      * @param  Collection<string, BusinessProcess|Asset>  $existing
-     * @return array{array{new: int, changed: int, unchanged: int, invalid: int}, array<string, string>}
+     * @return array{new: int, changed: int, unchanged: int, invalid: int}
      */
-    private function classify(RegisterImportKind $kind, array $rows, Collection $existing): array
+    private function counts(RegisterImportKind $kind, array $rows, Collection $existing): array
     {
         $counts = ['new' => 0, 'changed' => 0, 'unchanged' => 0, 'invalid' => 0];
-        $categoriesByKey = [];
         $fields = $kind === RegisterImportKind::Processes
             ? ['name', 'description', 'owner_name', 'owner_email']
             : ['name', 'type', 'description', 'owner_name', 'owner_email'];
@@ -180,10 +179,9 @@ class RegisterImportConfirmer
                 $category = 'unchanged';
             }
             $counts[$category]++;
-            $categoriesByKey[$row['key']] = $category;
         }
 
-        return [$counts, $categoriesByKey];
+        return $counts;
     }
 
     /**
@@ -201,11 +199,14 @@ class RegisterImportConfirmer
         return $actual === $reviewed;
     }
 
-    /** @param array<string, string> $categoriesByKey */
-    private function sameFingerprint(array $categoriesByKey, mixed $reviewed): bool
+    /**
+     * @param  list<array<string, string|bool|null>>  $rows
+     * @param  Collection<string, BusinessProcess|Asset>  $existing
+     */
+    private function sameFingerprint(RegisterImportKind $kind, array $rows, Collection $existing, mixed $reviewed): bool
     {
         return is_string($reviewed)
-            && hash_equals($reviewed, $this->stateFingerprint->make($categoriesByKey));
+            && hash_equals($reviewed, $this->stateFingerprint->make($kind, $rows, $existing));
     }
 
     /**

@@ -95,7 +95,7 @@ class RegisterImportPreviewer
     }
 
     /**
-     * @template TModel of Model
+     * @template TModel of BusinessProcess|Asset
      *
      * @param  Collection<int|string, TModel>  $existing
      * @param  list<string>  $fields
@@ -104,12 +104,10 @@ class RegisterImportPreviewer
     {
         $payload = [];
         $rows = [];
-        $categoriesByKey = [];
         foreach ($parsed->rows as $row) {
             $payload[] = $row->values;
             $record = $existing->get($row->values['key']);
             $category = $record === null ? 'new' : ($this->recordChanged($record, $row->values, $fields) ? 'changed' : 'unchanged');
-            $categoriesByKey[$row->values['key']] = $category;
             $rows[] = ['line' => $row->line, 'category' => $category, 'code' => null, 'values' => $row->values];
         }
 
@@ -117,7 +115,7 @@ class RegisterImportPreviewer
 
         return new RegisterImportPreview(
             $preview->payload,
-            [...$preview->summary, 'state_fingerprint' => $this->stateFingerprint->make($categoriesByKey)],
+            [...$preview->summary, 'state_fingerprint' => $this->stateFingerprint->make($parsed->kind, $payload, $existing)],
             $preview->status,
         );
     }
