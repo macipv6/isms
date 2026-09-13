@@ -40,6 +40,42 @@ class RegisterImportAtomicityTest extends TestCase
         $this->assertSame(RegisterImportStatus::Pending, $batch->fresh()->status);
     }
 
+    public function test_equal_count_category_swap_rejects_confirmation_without_partial_register_writes(): void
+    {
+        [, $project, $actor] = $this->context();
+        $wasChanged = BusinessProcess::factory()->for($project, 'project')->create([
+            'key' => 'WAS-CHANGED',
+            'name' => 'Before',
+            'description' => null,
+            'owner_name' => null,
+            'owner_email' => null,
+            'is_active' => true,
+        ]);
+        $wasUnchanged = BusinessProcess::factory()->for($project, 'project')->create([
+            'key' => 'WAS-UNCHANGED',
+            'name' => 'Stable',
+            'description' => null,
+            'owner_name' => null,
+            'owner_email' => null,
+            'is_active' => true,
+        ]);
+        $batch = $this->processPreview($project, $actor, [
+            'NEW,Must not apply,,,,true',
+            'WAS-CHANGED,Reviewed change,,,,true',
+            'WAS-UNCHANGED,Stable,,,,true',
+        ]);
+
+        $wasChanged->update(['name' => 'Reviewed change']);
+        $wasUnchanged->update(['name' => 'Concurrent change']);
+
+        $this->expectImportRejection(fn () => app(RegisterImportConfirmer::class)->confirm($batch, $actor));
+
+        $this->assertDatabaseMissing('business_processes', ['project_id' => $project->id, 'key' => 'NEW']);
+        $this->assertDatabaseHas('business_processes', ['id' => $wasChanged->id, 'name' => 'Reviewed change']);
+        $this->assertDatabaseHas('business_processes', ['id' => $wasUnchanged->id, 'name' => 'Concurrent change']);
+        $this->assertSame(RegisterImportStatus::Pending, $batch->fresh()->status);
+    }
+
     public function test_expired_or_no_longer_writable_batches_make_no_register_or_batch_changes(): void
     {
         foreach (['expired', 'project', 'customer'] as $case) {
