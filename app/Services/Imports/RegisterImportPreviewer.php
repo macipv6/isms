@@ -186,13 +186,11 @@ class RegisterImportPreviewer
                 unset($activeEdges[$pairKey]);
             }
         }
+        $cycleEdges = $this->cycleDetector->cycleEdgeKeys(array_values($activeEdges));
         foreach ($rows as &$row) {
-            if (isset($row['pair'], $candidates[$row['pair']]) && $candidates[$row['pair']]['active']) {
-                $candidate = $candidates[$row['pair']];
-                if ($this->cycleDetector->edgeParticipatesInCycle(array_values($activeEdges), ['source' => $candidate['source'], 'target' => $candidate['target']])) {
-                    $row['category'] = 'invalid';
-                    $row['code'] = 'cycle';
-                }
+            if (isset($row['pair'], $candidates[$row['pair']], $cycleEdges[$row['pair']]) && $candidates[$row['pair']]['active']) {
+                $row['category'] = 'invalid';
+                $row['code'] = 'cycle';
             }
         }
         unset($row);
@@ -211,14 +209,13 @@ class RegisterImportPreviewer
             return $preview;
         }
 
-        $rows = [...$preview->summary['rows'], ...$this->errorRows($errors)];
-        usort($rows, static fn (array $left, array $right): int => ($left['line'] ?? PHP_INT_MAX) <=> ($right['line'] ?? PHP_INT_MAX));
+        $rows = [...$this->errorRows($errors), ...$preview->summary['rows']];
         $counts = $preview->summary['counts'];
         $counts['invalid'] += $invalidRowCount;
 
         return new RegisterImportPreview(
             $preview->payload,
-            ['counts' => $counts, 'rows' => array_slice($rows, 0, self::MAX_PREVIEW_ROWS)],
+            ['counts' => $counts, 'rows' => $this->boundedRows($rows)],
             RegisterImportStatus::Rejected,
         );
     }
@@ -271,9 +268,28 @@ class RegisterImportPreviewer
 
         return new RegisterImportPreview(
             $payload,
-            ['counts' => $counts, 'rows' => array_slice($rows, 0, self::MAX_PREVIEW_ROWS)],
+            ['counts' => $counts, 'rows' => $this->boundedRows($rows)],
             $counts['invalid'] === 0 ? RegisterImportStatus::Pending : RegisterImportStatus::Rejected,
         );
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function boundedRows(array $rows): array
+    {
+        $invalid = [];
+        $categorized = [];
+        foreach ($rows as $row) {
+            if ($row['category'] === 'invalid') {
+                $invalid[] = $row;
+            } else {
+                $categorized[] = $row;
+            }
+        }
+
+        return array_slice([...$invalid, ...$categorized], 0, self::MAX_PREVIEW_ROWS);
     }
 
     /** @param array<string, list<string>> $errors */
