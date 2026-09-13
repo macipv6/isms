@@ -76,10 +76,46 @@ class RegisterImportPreviewTest extends TestCase
         $this->assertSame(RegisterImportStatus::Rejected, $batch->status);
         $this->assertSame([], $batch->payload);
         $this->assertLessThanOrEqual(200, count($batch->summary['rows']));
-        $this->assertLessThanOrEqual(200, $batch->summary['counts']['invalid']);
+        $this->assertSame(205, $batch->summary['counts']['invalid']);
         $this->assertArrayNotHasKey('raw', $batch->summary);
         $this->assertArrayNotHasKey('path', $batch->summary);
         $this->assertDatabaseCount('assets', 0);
+    }
+
+    public function test_mixed_asset_preview_preserves_valid_categories_and_uncapped_invalid_count(): void
+    {
+        [, $project, $actor] = $this->context();
+        Asset::factory()->for($project, 'project')->create([
+            'key' => 'UNCHANGED', 'name' => 'Unchanged', 'type' => AssetType::Application,
+            'description' => null, 'owner_name' => null, 'owner_email' => null, 'is_active' => true,
+        ]);
+        Asset::factory()->for($project, 'project')->create([
+            'key' => 'CHANGED', 'name' => 'Before', 'type' => AssetType::Application,
+            'description' => null, 'owner_name' => null, 'owner_email' => null, 'is_active' => true,
+        ]);
+        $rows = [
+            'NEW,New,application,,,,true',
+            'CHANGED,After,application,,,,true',
+            'UNCHANGED,Unchanged,application,,,,true',
+        ];
+        foreach (range(1, 205) as $index) {
+            $rows[] = "INVALID-{$index},Invalid {$index},invalid-type,,,,true";
+        }
+        $contents = "key,name,type,description,owner_name,owner_email,active\n".implode("\n", $rows)."\n";
+
+        $batch = app(RegisterImportPreviewer::class)->preview(
+            $project,
+            RegisterImportKind::Assets,
+            $this->upload('assets.csv', $contents),
+            $actor,
+        );
+
+        $this->assertSame(RegisterImportStatus::Rejected, $batch->status);
+        $this->assertEquals(['new' => 1, 'changed' => 1, 'unchanged' => 1, 'invalid' => 205], $batch->summary['counts']);
+        $this->assertSame(['NEW', 'CHANGED', 'UNCHANGED'], array_column($batch->payload, 'key'));
+        $this->assertSame(['new', 'changed', 'unchanged'], array_slice(array_column($batch->summary['rows'], 'category'), 0, 3));
+        $this->assertCount(200, $batch->summary['rows']);
+        $this->assertArrayNotHasKey('values', $batch->summary['rows'][3]);
     }
 
     public function test_asset_preview_recognizes_changed_and_unchanged_rows(): void
@@ -138,6 +174,79 @@ class RegisterImportPreviewTest extends TestCase
         }
 
         $this->assertDatabaseCount('dependency_edges', 1);
+    }
+
+    public function test_dependency_preview_checks_valid_cycle_candidates_when_another_row_has_an_invalid_endpoint(): void
+    {
+        [, $project, $actor] = $this->context();
+        $first = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P1', 'is_active' => true]);
+        $second = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P2', 'is_active' => true]);
+        DependencyEdge::factory()->for($project, 'project')->create([
+            'source_process_id' => $first->id, 'source_asset_id' => null,
+            'target_process_id' => $second->id, 'target_asset_id' => null,
+            'is_active' => true,
+        ]);
+        $contents = implode("\n", [
+            'source_type,source_key,target_type,target_key,importance,reason,active',
+            'process,P1,asset,MISSING,critical,,true',
+            'process,P2,process,P1,critical,,true',
+        ])."\n";
+
+        $batch = app(RegisterImportPreviewer::class)->preview($project, RegisterImportKind::Dependencies, $this->upload('dependencies.csv', $contents), $actor);
+
+        $this->assertSame(RegisterImportStatus::Rejected, $batch->status);
+        $this->assertSame(['unknown_endpoint', 'cycle'], array_column($batch->summary['rows'], 'code'));
+    }
+
+    public function test_dependency_preview_marks_only_candidate_rows_that_participate_in_a_cycle(): void
+    {
+        [, $project, $actor] = $this->context();
+        $first = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P1', 'is_active' => true]);
+        $second = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P2', 'is_active' => true]);
+        Asset::factory()->for($project, 'project')->create(['key' => 'A1', 'is_active' => true]);
+        DependencyEdge::factory()->for($project, 'project')->create([
+            'source_process_id' => $first->id, 'source_asset_id' => null,
+            'target_process_id' => $second->id, 'target_asset_id' => null,
+            'is_active' => true,
+        ]);
+        $contents = implode("\n", [
+            'source_type,source_key,target_type,target_key,importance,reason,active',
+            'process,P2,process,P1,critical,,true',
+            'process,P2,asset,A1,supporting,,true',
+        ])."\n";
+
+        $batch = app(RegisterImportPreviewer::class)->preview($project, RegisterImportKind::Dependencies, $this->upload('dependencies.csv', $contents), $actor);
+
+        $this->assertSame(RegisterImportStatus::Rejected, $batch->status);
+        $this->assertSame(['invalid', 'new'], array_column($batch->summary['rows'], 'category'));
+        $this->assertSame(['cycle', null], array_column($batch->summary['rows'], 'code'));
+    }
+
+    public function test_dependency_preview_excludes_existing_edges_with_inactive_endpoints_from_cycle_simulation(): void
+    {
+        [, $project, $actor] = $this->context();
+        $first = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P1', 'is_active' => true]);
+        $inactive = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P2', 'is_active' => false]);
+        $third = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P3', 'is_active' => true]);
+        DependencyEdge::factory()->for($project, 'project')->create([
+            'source_process_id' => $first->id, 'source_asset_id' => null,
+            'target_process_id' => $inactive->id, 'target_asset_id' => null,
+            'is_active' => true,
+        ]);
+        DependencyEdge::factory()->for($project, 'project')->create([
+            'source_process_id' => $inactive->id, 'source_asset_id' => null,
+            'target_process_id' => $third->id, 'target_asset_id' => null,
+            'is_active' => true,
+        ]);
+        $contents = implode("\n", [
+            'source_type,source_key,target_type,target_key,importance,reason,active',
+            'process,P3,process,P1,critical,,true',
+        ])."\n";
+
+        $batch = app(RegisterImportPreviewer::class)->preview($project, RegisterImportKind::Dependencies, $this->upload('dependencies.csv', $contents), $actor);
+
+        $this->assertSame(RegisterImportStatus::Pending, $batch->status);
+        $this->assertEquals(['new' => 1, 'changed' => 0, 'unchanged' => 0, 'invalid' => 0], $batch->summary['counts']);
     }
 
     /** @return array{Organization, IsmsProject, User} */
