@@ -76,6 +76,44 @@ class RegisterImportAtomicityTest extends TestCase
         $this->assertSame(RegisterImportStatus::Pending, $batch->fresh()->status);
     }
 
+    public function test_changed_row_with_different_current_values_rejects_confirmation_without_partial_register_writes(): void
+    {
+        [, $project, $actor] = $this->context();
+        $process = BusinessProcess::factory()->for($project, 'project')->create([
+            'key' => 'EXISTING',
+            'name' => 'Preview baseline',
+            'description' => 'Original description',
+            'owner_name' => 'Original owner',
+            'owner_email' => 'original@example.test',
+            'is_active' => true,
+        ]);
+        $batch = $this->processPreview($project, $actor, [
+            'NEW,Must not apply,,,,true',
+            'EXISTING,Reviewed change,Reviewed description,Reviewed owner,reviewed@example.test,false',
+        ]);
+
+        $process->update([
+            'name' => 'Concurrent change',
+            'description' => 'Concurrent description',
+            'owner_name' => 'Concurrent owner',
+            'owner_email' => 'concurrent@example.test',
+            'is_active' => false,
+        ]);
+
+        $this->expectImportRejection(fn () => app(RegisterImportConfirmer::class)->confirm($batch, $actor));
+
+        $this->assertDatabaseMissing('business_processes', ['project_id' => $project->id, 'key' => 'NEW']);
+        $this->assertDatabaseHas('business_processes', [
+            'id' => $process->id,
+            'name' => 'Concurrent change',
+            'description' => 'Concurrent description',
+            'owner_name' => 'Concurrent owner',
+            'owner_email' => 'concurrent@example.test',
+            'is_active' => false,
+        ]);
+        $this->assertSame(RegisterImportStatus::Pending, $batch->fresh()->status);
+    }
+
     public function test_expired_or_no_longer_writable_batches_make_no_register_or_batch_changes(): void
     {
         foreach (['expired', 'project', 'customer'] as $case) {
