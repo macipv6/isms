@@ -12,7 +12,7 @@ class DependencyCycleDetector
 
     public function assertCanConnect(IsmsProject $project, DependencyNode $source, DependencyNode $target): void
     {
-        foreach ($this->graph->dependencies($project, $target, transitive: true) as $hit) {
+        foreach ($this->graph->activeDependenciesForCycleCheck($project, $target) as $hit) {
             if ($hit->node->identity() === $source->identity()) {
                 throw ValidationException::withMessages([
                     'dependencies' => ['Die Abhängigkeiten enthalten einen Zyklus.'],

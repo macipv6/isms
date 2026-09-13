@@ -12,6 +12,10 @@ use Illuminate\Database\Eloquent\Builder;
 
 class DependencyGraph
 {
+    private const FRONTIER_CHUNK_SIZE = 100;
+
+    private const RESULT_CHUNK_SIZE = 100;
+
     /** @return list<TraversalHit> */
     public function dependencies(IsmsProject $project, DependencyNode $node, bool $transitive = false, bool $includeInactive = false): array
     {
@@ -33,10 +37,16 @@ class DependencyGraph
         ));
     }
 
+    /** @return list<TraversalHit> */
+    public function activeDependenciesForCycleCheck(IsmsProject $project, DependencyNode $node): array
+    {
+        return $this->traverse($project, $node, false, true, true, true);
+    }
+
     /**
      * @return list<TraversalHit>
      */
-    private function traverse(IsmsProject $project, DependencyNode $root, bool $reverse, bool $transitive, bool $includeInactive): array
+    private function traverse(IsmsProject $project, DependencyNode $root, bool $reverse, bool $transitive, bool $includeInactive, bool $activeEdgesOnly = false): array
     {
         abort_unless($root->projectId === $project->id, 404);
         $nodeLimit = $project->businessProcesses()->when(! $includeInactive, fn (Builder $query) => $query->where('is_active', true))->count()
@@ -51,9 +61,8 @@ class DependencyGraph
         $depth = 0;
         while ($frontier !== [] && count($visited) <= $nodeLimit) {
             $depth++;
-            $edges = $this->frontierEdges($project, $frontier, $reverse, $includeInactive);
             $candidates = [];
-            foreach ($edges as $edge) {
+            foreach ($this->frontierEdges($project, $frontier, $reverse, $includeInactive, $activeEdgesOnly) as $edge) {
                 $candidate = $this->nodeFromEdge($edge, $reverse ? 'source' : 'target');
                 if ($candidate === null || isset($visited[$candidate->identity()])) {
                     continue;
@@ -84,45 +93,51 @@ class DependencyGraph
 
     /**
      * @param  list<DependencyNode>  $frontier
-     * @return list<DependencyEdge>
+     * @return iterable<DependencyEdge>
      */
-    private function frontierEdges(IsmsProject $project, array $frontier, bool $reverse, bool $includeInactive): array
+    private function frontierEdges(IsmsProject $project, array $frontier, bool $reverse, bool $includeInactive, bool $activeEdgesOnly): iterable
     {
-        $processIds = [];
-        $assetIds = [];
-        foreach ($frontier as $node) {
-            if ($node->type === DependencyNodeType::Process) {
-                $processIds[] = $node->id;
-            } else {
-                $assetIds[] = $node->id;
+        $side = $reverse ? 'target' : 'source';
+        foreach (array_chunk($frontier, self::FRONTIER_CHUNK_SIZE) as $frontierChunk) {
+            $processIds = [];
+            $assetIds = [];
+            foreach ($frontierChunk as $node) {
+                if ($node->type === DependencyNodeType::Process) {
+                    $processIds[] = $node->id;
+                } else {
+                    $assetIds[] = $node->id;
+                }
+            }
+            $query = DependencyEdge::query()
+                ->with(['sourceProcess', 'sourceAsset', 'targetProcess', 'targetAsset'])
+                ->where('project_id', $project->id)
+                ->where(function (Builder $query) use ($side, $processIds, $assetIds): void {
+                    if ($processIds !== []) {
+                        $query->whereIn("{$side}_process_id", $processIds);
+                    }
+                    if ($assetIds !== []) {
+                        $method = $processIds === [] ? 'whereIn' : 'orWhereIn';
+                        $query->{$method}("{$side}_asset_id", $assetIds);
+                    }
+                });
+            if ($activeEdgesOnly) {
+                $query->where('is_active', true);
+            } elseif (! $includeInactive) {
+                $query->where('is_active', true)
+                    ->where(function (Builder $query): void {
+                        $query->whereHas('sourceProcess', fn (Builder $query) => $query->where('is_active', true))
+                            ->orWhereHas('sourceAsset', fn (Builder $query) => $query->where('is_active', true));
+                    })
+                    ->where(function (Builder $query): void {
+                        $query->whereHas('targetProcess', fn (Builder $query) => $query->where('is_active', true))
+                            ->orWhereHas('targetAsset', fn (Builder $query) => $query->where('is_active', true));
+                    });
+            }
+
+            foreach ($query->lazyById(self::RESULT_CHUNK_SIZE) as $edge) {
+                yield $edge;
             }
         }
-        $side = $reverse ? 'target' : 'source';
-        $query = DependencyEdge::query()
-            ->with(['sourceProcess', 'sourceAsset', 'targetProcess', 'targetAsset'])
-            ->where('project_id', $project->id)
-            ->where(function (Builder $query) use ($side, $processIds, $assetIds): void {
-                if ($processIds !== []) {
-                    $query->whereIn("{$side}_process_id", $processIds);
-                }
-                if ($assetIds !== []) {
-                    $method = $processIds === [] ? 'whereIn' : 'orWhereIn';
-                    $query->{$method}("{$side}_asset_id", $assetIds);
-                }
-            });
-        if (! $includeInactive) {
-            $query->where('is_active', true)
-                ->where(function (Builder $query): void {
-                    $query->whereHas('sourceProcess', fn (Builder $query) => $query->where('is_active', true))
-                        ->orWhereHas('sourceAsset', fn (Builder $query) => $query->where('is_active', true));
-                })
-                ->where(function (Builder $query): void {
-                    $query->whereHas('targetProcess', fn (Builder $query) => $query->where('is_active', true))
-                        ->orWhereHas('targetAsset', fn (Builder $query) => $query->where('is_active', true));
-                });
-        }
-
-        return $query->get()->all();
     }
 
     private function nodeFromEdge(DependencyEdge $edge, string $side): ?DependencyNode
