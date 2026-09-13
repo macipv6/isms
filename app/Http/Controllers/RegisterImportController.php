@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Enums\ProjectStatus;
 use App\Enums\RegisterImportStatus;
+use App\Http\Requests\Imports\ConfirmRegisterImportRequest;
 use App\Http\Requests\Imports\PreviewRegisterImportRequest;
 use App\Models\IsmsProject;
 use App\Models\Organization;
 use App\Models\RegisterImportBatch;
 use App\Models\User;
+use App\Services\Imports\RegisterImportConfirmer;
 use App\Services\Imports\RegisterImportPreviewer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -51,6 +53,18 @@ class RegisterImportController extends Controller
             'expired' => $expired,
             'canConfirm' => $canConfirm,
         ]);
+    }
+
+    public function confirm(
+        ConfirmRegisterImportRequest $request,
+        Organization $organization,
+        IsmsProject $project,
+        RegisterImportBatch $batch,
+        RegisterImportConfirmer $confirmer,
+    ): RedirectResponse {
+        $confirmed = $confirmer->confirm($batch, $this->actor($request));
+
+        return redirect()->route('register-imports.show', [$organization, $project, $confirmed]);
     }
 
     private function actor(Request $request): User

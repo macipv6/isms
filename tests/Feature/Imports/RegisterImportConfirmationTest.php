@@ -38,6 +38,8 @@ class RegisterImportConfirmationTest extends TestCase
         $omitted = BusinessProcess::factory()->for($project, 'project')->create([
             'key' => 'OMITTED', 'name' => 'Omitted', 'is_active' => true,
         ]);
+        $unchanged->refresh();
+        $omitted->refresh();
         $unchangedAt = $unchanged->updated_at;
         $omittedAt = $omitted->updated_at;
         $batch = $this->preview($project, $actor, RegisterImportKind::Processes, implode("\n", [

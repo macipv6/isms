@@ -53,6 +53,7 @@ Route::middleware(['auth', 'active-user'])->group(function (): void {
     Route::patch('/organizations/{organization}/projects/{project}/assets/{asset}/status', [AssetController::class, 'status'])->name('assets.status');
     Route::post('/organizations/{organization}/projects/{project}/imports/{kind}/preview', [RegisterImportController::class, 'preview'])->name('register-imports.preview');
     Route::get('/organizations/{organization}/projects/{project}/imports/{batch}', [RegisterImportController::class, 'show'])->name('register-imports.show');
+    Route::post('/organizations/{organization}/projects/{project}/imports/{batch}/confirm', [RegisterImportController::class, 'confirm'])->name('register-imports.confirm');
 
     Route::post('/organizations/{organization}/projects/{project}/assessment', [AssessmentController::class, 'start'])->name('assessments.start');
     Route::get('/organizations/{organization}/projects/{project}/assessment', [AssessmentController::class, 'show'])->name('assessments.show');
