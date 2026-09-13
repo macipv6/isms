@@ -24,19 +24,19 @@ class PurgeRegisterImportBatchesTest extends TestCase
         $actor = User::factory()->for(Organization::factory()->state(['organization_type' => 'internal']))->create();
         $attributes = ['payload' => [['key' => 'SECRET']], 'summary' => ['rows' => [['value' => 'SECRET']]]];
         $pending = RegisterImportBatch::factory()->for($project, 'project')->for($actor, 'creator')->create([
-            ...$attributes, 'status' => RegisterImportStatus::Pending, 'expires_at' => now()->subMinute(),
+            ...$attributes, 'status' => RegisterImportStatus::Pending, 'expires_at' => now('UTC')->subMinute(),
         ]);
         $live = RegisterImportBatch::factory()->for($project, 'project')->for($actor, 'creator')->create([
-            ...$attributes, 'status' => RegisterImportStatus::Pending, 'expires_at' => now()->addMinute(),
+            ...$attributes, 'status' => RegisterImportStatus::Pending, 'expires_at' => now('UTC')->addMinute(),
         ]);
         $expired = RegisterImportBatch::factory()->for($project, 'project')->for($actor, 'creator')->create([
-            ...$attributes, 'status' => RegisterImportStatus::Expired, 'expires_at' => now()->subMinute(),
+            ...$attributes, 'status' => RegisterImportStatus::Expired, 'expires_at' => now('UTC')->subMinute(),
         ]);
         $applied = RegisterImportBatch::factory()->for($project, 'project')->for($actor, 'creator')->create([
-            ...$attributes, 'status' => RegisterImportStatus::Applied, 'expires_at' => now()->subMinute(), 'applied_at' => now()->subMinute(),
+            ...$attributes, 'status' => RegisterImportStatus::Applied, 'expires_at' => now('UTC')->subMinute(), 'applied_at' => now('UTC')->subMinute(),
         ]);
         $rejected = RegisterImportBatch::factory()->for($project, 'project')->for($actor, 'creator')->create([
-            ...$attributes, 'status' => RegisterImportStatus::Rejected, 'expires_at' => now()->subMinute(),
+            ...$attributes, 'status' => RegisterImportStatus::Rejected, 'expires_at' => now('UTC')->subMinute(),
         ]);
 
         $this->artisan('register-imports:purge')->assertSuccessful();

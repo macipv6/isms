@@ -4,7 +4,6 @@ namespace Tests\Feature\Imports;
 
 use App\Enums\ProjectStatus;
 use App\Enums\RegisterImportKind;
-use App\Enums\RegisterImportStatus;
 use App\Models\AuditEvent;
 use App\Models\IsmsProject;
 use App\Models\Organization;
@@ -59,7 +58,7 @@ class RegisterImportAuthorizationTest extends TestCase
         $project->update(['status' => ProjectStatus::Completed]);
         $customer->update(['is_active' => false]);
         $this->actingAs($actor)->get($this->showUrl($customer, $project, $batch))->assertOk()->assertJsonPath('canConfirm', false);
-        $batch->update(['expires_at' => now()->subMinute()]);
+        $batch->update(['expires_at' => now('UTC')->subMinute()]);
         $this->actingAs($actor)->get($this->showUrl($customer, $project, $batch))->assertOk()->assertJsonPath('expired', true);
     }
 

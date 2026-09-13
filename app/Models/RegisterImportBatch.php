@@ -14,6 +14,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * @property RegisterImportKind $kind
  * @property RegisterImportStatus $status
+ * @property string $project_id
+ * @property string $created_by
+ * @property string $sha256
  * @property array<mixed> $payload
  * @property array<mixed> $summary
  * @property CarbonImmutable $expires_at

@@ -27,10 +27,13 @@ class AuditLogger
         'new_status',
         'link_type',
         'failure_kind',
+        'import_batch_id',
+        'import_kind',
+        'row_counts',
     ];
 
     /**
-     * @param  array<string, string|list<string>|null>  $context
+     * @param  array<string, string|list<string>|array<string, int>|null>  $context
      */
     public function record(
         string $eventType,

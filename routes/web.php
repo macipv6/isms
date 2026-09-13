@@ -14,6 +14,7 @@ use App\Http\Controllers\IsmsProjectController;
 use App\Http\Controllers\MeasureController;
 use App\Http\Controllers\MeasureRegisterController;
 use App\Http\Controllers\OrganizationController;
+use App\Http\Controllers\RegisterImportController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/login');
@@ -50,6 +51,8 @@ Route::middleware(['auth', 'active-user'])->group(function (): void {
     Route::post('/organizations/{organization}/projects/{project}/assets', [AssetController::class, 'store'])->name('assets.store');
     Route::put('/organizations/{organization}/projects/{project}/assets/{asset}', [AssetController::class, 'update'])->name('assets.update');
     Route::patch('/organizations/{organization}/projects/{project}/assets/{asset}/status', [AssetController::class, 'status'])->name('assets.status');
+    Route::post('/organizations/{organization}/projects/{project}/imports/{kind}/preview', [RegisterImportController::class, 'preview'])->name('register-imports.preview');
+    Route::get('/organizations/{organization}/projects/{project}/imports/{batch}', [RegisterImportController::class, 'show'])->name('register-imports.show');
 
     Route::post('/organizations/{organization}/projects/{project}/assessment', [AssessmentController::class, 'start'])->name('assessments.start');
     Route::get('/organizations/{organization}/projects/{project}/assessment', [AssessmentController::class, 'show'])->name('assessments.show');

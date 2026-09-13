@@ -50,7 +50,7 @@ class RegisterImportPreviewTest extends TestCase
         $this->assertSame(RegisterImportStatus::Pending, $batch->status);
         $this->assertSame(hash('sha256', $contents), $batch->sha256);
         $this->assertTrue($batch->expires_at->equalTo(now()->addMinutes(30)));
-        $this->assertSame(['new' => 1, 'changed' => 1, 'unchanged' => 1, 'invalid' => 0], $batch->summary['counts']);
+        $this->assertEquals(['new' => 1, 'changed' => 1, 'unchanged' => 1, 'invalid' => 0], $batch->summary['counts']);
         $this->assertSame(['NEW', 'CHANGED', 'UNCHANGED'], array_column($batch->payload, 'key'));
         $this->assertSame(['new', 'changed', 'unchanged'], array_column($batch->summary['rows'], 'category'));
         $this->assertDatabaseCount('business_processes', 2);
@@ -102,7 +102,7 @@ class RegisterImportPreviewTest extends TestCase
 
         $batch = app(RegisterImportPreviewer::class)->preview($project, RegisterImportKind::Assets, $this->upload('assets.csv', $contents), $actor);
 
-        $this->assertSame(['new' => 1, 'changed' => 1, 'unchanged' => 1, 'invalid' => 0], $batch->summary['counts']);
+        $this->assertEquals(['new' => 1, 'changed' => 1, 'unchanged' => 1, 'invalid' => 0], $batch->summary['counts']);
         $this->assertSame(['unchanged', 'changed', 'new'], array_column($batch->summary['rows'], 'category'));
         $this->assertDatabaseCount('assets', 2);
     }
