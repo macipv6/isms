@@ -6,6 +6,7 @@ use App\Http\Controllers\AssetController;
 use App\Http\Controllers\Auth\EntraAuthController;
 use App\Http\Controllers\BusinessProcessController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DependencyController;
 use App\Http\Controllers\EvidenceController;
 use App\Http\Controllers\EvidenceRegisterController;
 use App\Http\Controllers\FindingController;
@@ -51,6 +52,10 @@ Route::middleware(['auth', 'active-user'])->group(function (): void {
     Route::post('/organizations/{organization}/projects/{project}/assets', [AssetController::class, 'store'])->name('assets.store');
     Route::put('/organizations/{organization}/projects/{project}/assets/{asset}', [AssetController::class, 'update'])->name('assets.update');
     Route::patch('/organizations/{organization}/projects/{project}/assets/{asset}/status', [AssetController::class, 'status'])->name('assets.status');
+    Route::post('/organizations/{organization}/projects/{project}/dependencies', [DependencyController::class, 'store'])->name('dependencies.store');
+    Route::put('/organizations/{organization}/projects/{project}/dependencies/{dependency}', [DependencyController::class, 'update'])->name('dependencies.update');
+    Route::patch('/organizations/{organization}/projects/{project}/dependencies/{dependency}/status', [DependencyController::class, 'status'])->name('dependencies.status');
+    Route::get('/organizations/{organization}/projects/{project}/dependencies/{type}/{key}/graph', [DependencyController::class, 'graph'])->name('dependencies.graph');
     Route::post('/organizations/{organization}/projects/{project}/imports/{kind}/preview', [RegisterImportController::class, 'preview'])->name('register-imports.preview');
     Route::get('/organizations/{organization}/projects/{project}/imports/{batch}', [RegisterImportController::class, 'show'])->name('register-imports.show');
     Route::post('/organizations/{organization}/projects/{project}/imports/{batch}/confirm', [RegisterImportController::class, 'confirm'])->name('register-imports.confirm');

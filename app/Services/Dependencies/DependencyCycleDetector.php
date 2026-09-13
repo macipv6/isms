@@ -2,10 +2,25 @@
 
 namespace App\Services\Dependencies;
 
+use App\Data\Dependencies\DependencyNode;
+use App\Models\IsmsProject;
 use Illuminate\Validation\ValidationException;
 
 class DependencyCycleDetector
 {
+    public function __construct(private readonly DependencyGraph $graph) {}
+
+    public function assertCanConnect(IsmsProject $project, DependencyNode $source, DependencyNode $target): void
+    {
+        foreach ($this->graph->dependencies($project, $target, transitive: true) as $hit) {
+            if ($hit->node->identity() === $source->identity()) {
+                throw ValidationException::withMessages([
+                    'dependencies' => ['Die Abhängigkeiten enthalten einen Zyklus.'],
+                ]);
+            }
+        }
+    }
+
     /**
      * @param  list<array{source: string, target: string}>  $edges
      * @return array<string, true>

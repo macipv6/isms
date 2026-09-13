@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Dependencies;
 
-use App\Data\Dependencies\DependencyNode;
 use App\Enums\DependencyImportance;
 use App\Models\Asset;
 use App\Models\BusinessProcess;
@@ -73,6 +72,7 @@ class DependencyWorkflowTest extends TestCase
         $edge = $service->create($project, $this->payload('process', 'P1', 'asset', 'A1'), $actor);
         $expected = $edge->updated_at->toIso8601String();
 
+        $this->travel(1)->seconds();
         $updated = $service->update($edge, ['importance' => 'critical', 'reason' => 'Needed'], $actor, $expected);
 
         $this->assertSame(DependencyImportance::Critical, $updated->importance);
