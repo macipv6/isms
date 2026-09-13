@@ -113,9 +113,36 @@ class RegisterImportPreviewTest extends TestCase
         $this->assertSame(RegisterImportStatus::Rejected, $batch->status);
         $this->assertEquals(['new' => 1, 'changed' => 1, 'unchanged' => 1, 'invalid' => 205], $batch->summary['counts']);
         $this->assertSame(['NEW', 'CHANGED', 'UNCHANGED'], array_column($batch->payload, 'key'));
-        $this->assertSame(['new', 'changed', 'unchanged'], array_slice(array_column($batch->summary['rows'], 'category'), 0, 3));
         $this->assertCount(200, $batch->summary['rows']);
-        $this->assertArrayNotHasKey('values', $batch->summary['rows'][3]);
+        $this->assertSame(['invalid'], array_values(array_unique(array_column($batch->summary['rows'], 'category'))));
+        $this->assertArrayNotHasKey('values', $batch->summary['rows'][0]);
+    }
+
+    public function test_asset_preview_prioritizes_a_late_error_after_two_hundred_valid_rows(): void
+    {
+        [, $project, $actor] = $this->context();
+        $rows = [];
+        foreach (range(1, 205) as $index) {
+            $rows[] = "ASSET-{$index},Asset {$index},application,,,,true";
+        }
+        $rows[] = 'INVALID-LATE,Invalid late,invalid-type,,,,true';
+        $contents = "key,name,type,description,owner_name,owner_email,active\n".implode("\n", $rows)."\n";
+
+        $batch = app(RegisterImportPreviewer::class)->preview(
+            $project,
+            RegisterImportKind::Assets,
+            $this->upload('assets.csv', $contents),
+            $actor,
+        );
+
+        $this->assertSame(RegisterImportStatus::Rejected, $batch->status);
+        $this->assertEquals(['new' => 205, 'changed' => 0, 'unchanged' => 0, 'invalid' => 1], $batch->summary['counts']);
+        $this->assertCount(200, $batch->summary['rows']);
+        $this->assertSame(207, $batch->summary['rows'][0]['line']);
+        $this->assertSame('type', $batch->summary['rows'][0]['field']);
+        $this->assertSame('invalid', $batch->summary['rows'][0]['category']);
+        $this->assertSame('invalid_row', $batch->summary['rows'][0]['code']);
+        $this->assertArrayNotHasKey('values', $batch->summary['rows'][0]);
     }
 
     public function test_asset_preview_recognizes_changed_and_unchanged_rows(): void
