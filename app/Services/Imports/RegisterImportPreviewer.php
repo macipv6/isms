@@ -31,6 +31,7 @@ class RegisterImportPreviewer
         private readonly RegisterCsvReader $reader,
         private readonly DependencyCycleDetector $cycleDetector,
         private readonly AuditLogger $audit,
+        private readonly RegisterImportStateFingerprint $stateFingerprint,
     ) {}
 
     public function preview(IsmsProject $project, RegisterImportKind $kind, UploadedFile $file, User $actor): RegisterImportBatch
@@ -103,14 +104,22 @@ class RegisterImportPreviewer
     {
         $payload = [];
         $rows = [];
+        $categoriesByKey = [];
         foreach ($parsed->rows as $row) {
             $payload[] = $row->values;
             $record = $existing->get($row->values['key']);
             $category = $record === null ? 'new' : ($this->recordChanged($record, $row->values, $fields) ? 'changed' : 'unchanged');
+            $categoriesByKey[$row->values['key']] = $category;
             $rows[] = ['line' => $row->line, 'category' => $category, 'code' => null, 'values' => $row->values];
         }
 
-        return $this->buildPreview($payload, $rows);
+        $preview = $this->buildPreview($payload, $rows);
+
+        return new RegisterImportPreview(
+            $preview->payload,
+            [...$preview->summary, 'state_fingerprint' => $this->stateFingerprint->make($categoriesByKey)],
+            $preview->status,
+        );
     }
 
     /**

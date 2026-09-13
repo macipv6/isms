@@ -28,6 +28,7 @@ class RegisterImportConfirmer
         private readonly BusinessProcessService $processes,
         private readonly AssetService $assets,
         private readonly AuditLogger $audit,
+        private readonly RegisterImportStateFingerprint $stateFingerprint,
     ) {}
 
     public function confirm(RegisterImportBatch $batch, User $actor): RegisterImportBatch
@@ -42,8 +43,9 @@ class RegisterImportConfirmer
                 $project = $this->lockedWritableProject($lockedBatch);
                 $rows = $this->canonicalRows($lockedBatch);
                 $existing = $this->lockedExisting($project, $lockedBatch->kind, $rows);
-                $counts = $this->counts($lockedBatch->kind, $rows, $existing);
-                if (! $this->sameCounts($counts, $lockedBatch->summary['counts'] ?? null)) {
+                [$counts, $categoriesByKey] = $this->classify($lockedBatch->kind, $rows, $existing);
+                if (! $this->sameCounts($counts, $lockedBatch->summary['counts'] ?? null)
+                    || ! $this->sameFingerprint($categoriesByKey, $lockedBatch->summary['state_fingerprint'] ?? null)) {
                     $this->reject();
                 }
 
@@ -159,26 +161,29 @@ class RegisterImportConfirmer
     /**
      * @param  list<array<string, string|bool|null>>  $rows
      * @param  Collection<string, BusinessProcess|Asset>  $existing
-     * @return array{new: int, changed: int, unchanged: int, invalid: int}
+     * @return array{array{new: int, changed: int, unchanged: int, invalid: int}, array<string, string>}
      */
-    private function counts(RegisterImportKind $kind, array $rows, Collection $existing): array
+    private function classify(RegisterImportKind $kind, array $rows, Collection $existing): array
     {
         $counts = ['new' => 0, 'changed' => 0, 'unchanged' => 0, 'invalid' => 0];
+        $categoriesByKey = [];
         $fields = $kind === RegisterImportKind::Processes
             ? ['name', 'description', 'owner_name', 'owner_email']
             : ['name', 'type', 'description', 'owner_name', 'owner_email'];
         foreach ($rows as $row) {
             $record = $existing->get($row['key']);
             if (! $record instanceof Model) {
-                $counts['new']++;
+                $category = 'new';
             } elseif ($this->changed($record, $row, $fields)) {
-                $counts['changed']++;
+                $category = 'changed';
             } else {
-                $counts['unchanged']++;
+                $category = 'unchanged';
             }
+            $counts[$category]++;
+            $categoriesByKey[$row['key']] = $category;
         }
 
-        return $counts;
+        return [$counts, $categoriesByKey];
     }
 
     /**
@@ -194,6 +199,13 @@ class RegisterImportConfirmer
         ksort($reviewed);
 
         return $actual === $reviewed;
+    }
+
+    /** @param array<string, string> $categoriesByKey */
+    private function sameFingerprint(array $categoriesByKey, mixed $reviewed): bool
+    {
+        return is_string($reviewed)
+            && hash_equals($reviewed, $this->stateFingerprint->make($categoriesByKey));
     }
 
     /**
