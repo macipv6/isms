@@ -249,7 +249,7 @@ class RegisterImportPreviewTest extends TestCase
         $this->assertSame(['cycle', null], array_column($batch->summary['rows'], 'code'));
     }
 
-    public function test_dependency_preview_excludes_existing_edges_with_inactive_endpoints_from_cycle_simulation(): void
+    public function test_dependency_preview_keeps_active_edges_with_inactive_endpoints_in_cycle_simulation(): void
     {
         [, $project, $actor] = $this->context();
         $first = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P1', 'is_active' => true]);
@@ -272,8 +272,9 @@ class RegisterImportPreviewTest extends TestCase
 
         $batch = app(RegisterImportPreviewer::class)->preview($project, RegisterImportKind::Dependencies, $this->upload('dependencies.csv', $contents), $actor);
 
-        $this->assertSame(RegisterImportStatus::Pending, $batch->status);
-        $this->assertEquals(['new' => 1, 'changed' => 0, 'unchanged' => 0, 'invalid' => 0], $batch->summary['counts']);
+        $this->assertSame(RegisterImportStatus::Rejected, $batch->status);
+        $this->assertEquals(['new' => 0, 'changed' => 0, 'unchanged' => 0, 'invalid' => 1], $batch->summary['counts']);
+        $this->assertSame('cycle', $batch->summary['rows'][0]['code']);
     }
 
     /** @return array{Organization, IsmsProject, User} */

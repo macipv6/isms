@@ -121,6 +121,54 @@ class DependencyService
     }
 
     /**
+     * Apply one already validated row while the caller holds the project lock and
+     * has checked the complete final graph. Import summaries own the audit event.
+     *
+     * @param  array{importance: string, reason: string|null, active: bool}  $attributes
+     */
+    public function upsertFromImport(
+        IsmsProject $project,
+        DependencyNode $source,
+        DependencyNode $target,
+        array $attributes,
+        ?DependencyEdge $existing,
+        User $actor,
+    ): DependencyEdge {
+        if ($source->projectId !== $project->id || $target->projectId !== $project->id) {
+            $this->reject('dependency', 'Die Abhängigkeit gehört nicht zu diesem Projekt.');
+        }
+
+        $pair = $this->pairColumns($source, $target);
+        if ($existing instanceof DependencyEdge) {
+            if ($existing->project_id !== $project->id || array_filter(
+                array_keys($pair),
+                fn (string $column): bool => $existing->getAttribute($column) !== $pair[$column],
+            ) !== []) {
+                $this->reject('dependency', 'Die Abhängigkeit gehört nicht zu diesem Projekt.');
+            }
+            $existing->fill([
+                'importance' => $attributes['importance'],
+                'reason' => $attributes['reason'],
+                'is_active' => $attributes['active'],
+            ]);
+            if ($existing->isDirty()) {
+                $existing->save();
+            }
+
+            return $existing;
+        }
+
+        return DependencyEdge::query()->create([
+            ...$pair,
+            'project_id' => $project->id,
+            'importance' => $attributes['importance'],
+            'reason' => $attributes['reason'],
+            'is_active' => $attributes['active'],
+            'created_by' => $actor->id,
+        ]);
+    }
+
+    /**
      * @param  array<string, mixed>  $attributes
      * @return array<string, mixed>
      */

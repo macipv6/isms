@@ -2,17 +2,21 @@
 
 namespace App\Services\Imports;
 
+use App\Data\Dependencies\DependencyNode;
 use App\Enums\ProjectStatus;
 use App\Enums\RegisterImportKind;
 use App\Enums\RegisterImportStatus;
 use App\Enums\UserRole;
 use App\Models\Asset;
 use App\Models\BusinessProcess;
+use App\Models\DependencyEdge;
 use App\Models\IsmsProject;
 use App\Models\Organization;
 use App\Models\RegisterImportBatch;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
+use App\Services\Dependencies\DependencyCycleDetector;
+use App\Services\Dependencies\DependencyService;
 use App\Services\Registers\AssetService;
 use App\Services\Registers\BusinessProcessService;
 use Illuminate\Database\Eloquent\Model;
@@ -29,6 +33,8 @@ class RegisterImportConfirmer
         private readonly AssetService $assets,
         private readonly AuditLogger $audit,
         private readonly RegisterImportStateFingerprint $stateFingerprint,
+        private readonly DependencyCycleDetector $cycleDetector,
+        private readonly DependencyService $dependencies,
     ) {}
 
     public function confirm(RegisterImportBatch $batch, User $actor): RegisterImportBatch
@@ -42,14 +48,24 @@ class RegisterImportConfirmer
                 $this->assertConfirmable($lockedBatch, $actor);
                 $project = $this->lockedWritableProject($lockedBatch);
                 $rows = $this->canonicalRows($lockedBatch);
-                $existing = $this->lockedExisting($project, $lockedBatch->kind, $rows);
-                $counts = $this->counts($lockedBatch->kind, $rows, $existing);
-                if (! $this->sameCounts($counts, $lockedBatch->summary['counts'] ?? null)
-                    || ! $this->sameFingerprint($lockedBatch->kind, $rows, $existing, $lockedBatch->summary['state_fingerprint'] ?? null)) {
-                    $this->reject();
+                if ($lockedBatch->kind === RegisterImportKind::Dependencies) {
+                    $state = $this->lockedDependencyState($project, $rows);
+                    $counts = $this->dependencyCounts($state['rows']);
+                    if (! $this->sameCounts($counts, $lockedBatch->summary['counts'] ?? null)
+                        || ! $this->sameDependencyFingerprint($rows, $state, $lockedBatch->summary['state_fingerprint'] ?? null)) {
+                        $this->reject();
+                    }
+                    $this->assertFinalDependencyGraphIsAcyclic($state);
+                    $this->applyDependencies($project, $state['rows'], $actor);
+                } else {
+                    $existing = $this->lockedExisting($project, $lockedBatch->kind, $rows);
+                    $counts = $this->counts($lockedBatch->kind, $rows, $existing);
+                    if (! $this->sameCounts($counts, $lockedBatch->summary['counts'] ?? null)
+                        || ! $this->sameFingerprint($lockedBatch->kind, $rows, $existing, $lockedBatch->summary['state_fingerprint'] ?? null)) {
+                        $this->reject();
+                    }
+                    $this->apply($project, $lockedBatch->kind, $rows, $existing, $actor);
                 }
-
-                $this->apply($project, $lockedBatch->kind, $rows, $existing, $actor);
                 $lockedBatch->update([
                     'status' => RegisterImportStatus::Applied,
                     'applied_at' => now('UTC'),
@@ -80,8 +96,7 @@ class RegisterImportConfirmer
             || $actor->organization?->organization_type !== 'internal'
             || ! in_array($actor->role, [UserRole::Admin, UserRole::Consultant], true)
             || $batch->status !== RegisterImportStatus::Pending
-            || $batch->expires_at->getTimestamp() <= now('UTC')->getTimestamp()
-            || ! in_array($batch->kind, [RegisterImportKind::Processes, RegisterImportKind::Assets], true)) {
+            || $batch->expires_at->getTimestamp() <= now('UTC')->getTimestamp()) {
             $this->reject();
         }
     }
@@ -112,7 +127,7 @@ class RegisterImportConfirmer
         }
 
         $rows = [];
-        $keys = [];
+        $identifiers = [];
         foreach ($batch->payload as $index => $payloadRow) {
             if (! is_array($payloadRow)) {
                 $this->reject();
@@ -129,14 +144,201 @@ class RegisterImportConfirmer
             $canonicalPayloadRow = $payloadRow;
             ksort($row);
             ksort($canonicalPayloadRow);
-            if ($row !== $canonicalPayloadRow || ! isset($row['key']) || ! is_string($row['key']) || isset($keys[$row['key']])) {
+            $identifier = $this->rowValidator->identifier($batch->kind, $row);
+            if ($row !== $canonicalPayloadRow || $identifier === null || isset($identifiers[$identifier])) {
                 $this->reject();
             }
-            $keys[$row['key']] = true;
+            $identifiers[$identifier] = true;
             $rows[] = $row;
         }
 
         return $rows;
+    }
+
+    /**
+     * @param  list<array<string, string|bool|null>>  $rows
+     * @return array{
+     *     processes: Collection<string, BusinessProcess>,
+     *     assets: Collection<string, Asset>,
+     *     edges: Collection<int, DependencyEdge>,
+     *     rows: list<array{values: array<string, string|bool|null>, source: DependencyNode, target: DependencyNode, existing: DependencyEdge|null}>
+     * }
+     */
+    private function lockedDependencyState(IsmsProject $project, array $rows): array
+    {
+        $processKeys = [];
+        $assetKeys = [];
+        foreach ($rows as $row) {
+            foreach (['source', 'target'] as $side) {
+                if ($row[$side.'_type'] === 'process') {
+                    $processKeys[] = $row[$side.'_key'];
+                } else {
+                    $assetKeys[] = $row[$side.'_key'];
+                }
+            }
+        }
+
+        /** @var Collection<string, BusinessProcess> $processes */
+        $processes = BusinessProcess::query()
+            ->where('project_id', $project->id)
+            ->whereIn('key', array_values(array_unique($processKeys)))
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('key');
+        /** @var Collection<string, Asset> $assets */
+        $assets = Asset::query()
+            ->where('project_id', $project->id)
+            ->whereIn('key', array_values(array_unique($assetKeys)))
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('key');
+        /** @var Collection<int, DependencyEdge> $edges */
+        $edges = DependencyEdge::query()
+            ->where('project_id', $project->id)
+            ->oldest('created_at')
+            ->oldest('id')
+            ->lockForUpdate()
+            ->get();
+
+        $existingByPair = [];
+        foreach ($edges as $edge) {
+            $pairKey = $this->edgePairKey($edge);
+            if (! isset($existingByPair[$pairKey]) || $edge->is_active) {
+                $existingByPair[$pairKey] = $edge;
+            }
+        }
+
+        $resolvedRows = [];
+        foreach ($rows as $row) {
+            $source = $this->resolvedDependencyNode($row['source_type'], $row['source_key'], $processes, $assets);
+            $target = $this->resolvedDependencyNode($row['target_type'], $row['target_key'], $processes, $assets);
+            $pairKey = $source->identity().'>'.$target->identity();
+            $resolvedRows[] = [
+                'values' => $row,
+                'source' => $source,
+                'target' => $target,
+                'existing' => $existingByPair[$pairKey] ?? null,
+            ];
+        }
+
+        return ['processes' => $processes, 'assets' => $assets, 'edges' => $edges, 'rows' => $resolvedRows];
+    }
+
+    /**
+     * @param  Collection<string, BusinessProcess>  $processes
+     * @param  Collection<string, Asset>  $assets
+     */
+    private function resolvedDependencyNode(string $type, string $key, Collection $processes, Collection $assets): DependencyNode
+    {
+        $record = $type === 'process' ? $processes->get($key) : $assets->get($key);
+        if (! $record instanceof BusinessProcess && ! $record instanceof Asset) {
+            $this->reject();
+        }
+        if (! $record->is_active) {
+            $this->reject();
+        }
+
+        return $record instanceof BusinessProcess ? DependencyNode::process($record) : DependencyNode::asset($record);
+    }
+
+    /**
+     * @param  list<array{values: array<string, string|bool|null>, source: DependencyNode, target: DependencyNode, existing: DependencyEdge|null}>  $rows
+     * @return array{new: int, changed: int, unchanged: int, invalid: int}
+     */
+    private function dependencyCounts(array $rows): array
+    {
+        $counts = ['new' => 0, 'changed' => 0, 'unchanged' => 0, 'invalid' => 0];
+        foreach ($rows as $row) {
+            $existing = $row['existing'];
+            $values = $row['values'];
+            $category = ! $existing instanceof DependencyEdge
+                ? 'new'
+                : ($existing->importance->value !== $values['importance']
+                    || $existing->reason !== $values['reason']
+                    || $existing->is_active !== $values['active'] ? 'changed' : 'unchanged');
+            $counts[$category]++;
+        }
+
+        return $counts;
+    }
+
+    /**
+     * @param  list<array<string, string|bool|null>>  $rows
+     * @param  array{processes: Collection<string, BusinessProcess>, assets: Collection<string, Asset>, edges: Collection<int, DependencyEdge>}  $state
+     */
+    private function sameDependencyFingerprint(array $rows, array $state, mixed $reviewed): bool
+    {
+        return is_string($reviewed)
+            && hash_equals($reviewed, $this->stateFingerprint->makeDependencies($rows, $state['processes'], $state['assets'], $state['edges']));
+    }
+
+    /**
+     * @param  array{
+     *     edges: Collection<int, DependencyEdge>,
+     *     rows: list<array{values: array<string, string|bool|null>, source: DependencyNode, target: DependencyNode, existing: DependencyEdge|null}>
+     * }  $state
+     */
+    private function assertFinalDependencyGraphIsAcyclic(array $state): void
+    {
+        $activeEdges = [];
+        foreach ($state['edges'] as $edge) {
+            if ($edge->is_active) {
+                $activeEdges[$this->edgePairKey($edge)] = $this->edgePair($edge);
+            }
+        }
+        foreach ($state['rows'] as $row) {
+            $pairKey = $row['source']->identity().'>'.$row['target']->identity();
+            if ($row['values']['active']) {
+                $activeEdges[$pairKey] = ['source' => $row['source']->identity(), 'target' => $row['target']->identity()];
+            } else {
+                unset($activeEdges[$pairKey]);
+            }
+        }
+
+        $this->cycleDetector->assertAcyclic([], array_values($activeEdges));
+    }
+
+    /**
+     * @param  list<array{values: array<string, string|bool|null>, source: DependencyNode, target: DependencyNode, existing: DependencyEdge|null}>  $rows
+     */
+    private function applyDependencies(IsmsProject $project, array $rows, User $actor): void
+    {
+        foreach ($rows as $row) {
+            if ($row['existing'] instanceof DependencyEdge
+                && $row['existing']->importance->value === $row['values']['importance']
+                && $row['existing']->reason === $row['values']['reason']
+                && $row['existing']->is_active === $row['values']['active']) {
+                continue;
+            }
+            $this->dependencies->upsertFromImport(
+                $project,
+                $row['source'],
+                $row['target'],
+                [
+                    'importance' => $row['values']['importance'],
+                    'reason' => $row['values']['reason'],
+                    'active' => $row['values']['active'],
+                ],
+                $row['existing'],
+                $actor,
+            );
+        }
+    }
+
+    /** @return array{source: string, target: string} */
+    private function edgePair(DependencyEdge $edge): array
+    {
+        return [
+            'source' => $edge->source_process_id !== null ? 'process:'.$edge->source_process_id : 'asset:'.$edge->source_asset_id,
+            'target' => $edge->target_process_id !== null ? 'process:'.$edge->target_process_id : 'asset:'.$edge->target_asset_id,
+        ];
+    }
+
+    private function edgePairKey(DependencyEdge $edge): string
+    {
+        $pair = $this->edgePair($edge);
+
+        return $pair['source'].'>'.$pair['target'];
     }
 
     /**

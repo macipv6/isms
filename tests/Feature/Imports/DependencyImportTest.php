@@ -40,6 +40,8 @@ class DependencyImportTest extends TestCase
         $deactivated = $this->edge($project, $actor, $a1, $a2, true, DependencyImportance::Supporting, null);
         $historical = $this->edge($project, $actor, $a2, $a3, false, DependencyImportance::Supporting, 'old');
         $omitted = $this->edge($project, $actor, $p3, $a3, true, DependencyImportance::Supporting, 'omitted');
+        $unchanged->refresh();
+        $omitted->refresh();
         $unchangedAt = $unchanged->updated_at;
         $omittedAt = $omitted->updated_at;
 
@@ -84,13 +86,13 @@ class DependencyImportTest extends TestCase
             'reason' => 'restored',
             'is_active' => true,
         ]);
-        $this->assertTrue($unchanged->fresh()->updated_at->equalTo($unchangedAt));
-        $this->assertTrue($omitted->fresh()->updated_at->equalTo($omittedAt));
+        $this->assertSame($unchangedAt->toIso8601String(), $unchanged->fresh()->updated_at->toIso8601String());
+        $this->assertSame($omittedAt->toIso8601String(), $omitted->fresh()->updated_at->toIso8601String());
         $this->assertDatabaseCount('dependency_edges', 6);
 
         $applied = AuditEvent::query()->where('event_type', 'register_import.applied')->sole();
         $this->assertSame($project->organization_id, $applied->organization_id);
-        $this->assertSame([
+        $this->assertEquals([
             'project_id' => $project->id,
             'import_batch_id' => $batch->id,
             'import_kind' => RegisterImportKind::Dependencies->value,

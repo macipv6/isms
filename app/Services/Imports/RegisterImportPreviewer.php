@@ -143,25 +143,17 @@ class RegisterImportPreviewer
     {
         $processes = BusinessProcess::query()->where('project_id', $project->id)->get()->keyBy('key');
         $assets = Asset::query()->where('project_id', $project->id)->get()->keyBy('key');
-        $edges = DependencyEdge::query()->where('project_id', $project->id)->get();
+        $edges = DependencyEdge::query()->where('project_id', $project->id)->oldest('created_at')->oldest('id')->get();
         $existingByPair = [];
         $activeEdges = [];
-        $activeNodes = [];
-        foreach ($processes as $process) {
-            if ($process->is_active) {
-                $activeNodes['process:'.$process->id] = true;
-            }
-        }
-        foreach ($assets as $asset) {
-            if ($asset->is_active) {
-                $activeNodes['asset:'.$asset->id] = true;
-            }
-        }
         foreach ($edges as $edge) {
             $pair = $this->edgePair($edge);
-            $existingByPair[$pair['source'].'>'.$pair['target']] = $edge;
-            if ($edge->is_active && isset($activeNodes[$pair['source']], $activeNodes[$pair['target']])) {
-                $activeEdges[$pair['source'].'>'.$pair['target']] = $pair;
+            $pairKey = $pair['source'].'>'.$pair['target'];
+            if (! isset($existingByPair[$pairKey]) || $edge->is_active) {
+                $existingByPair[$pairKey] = $edge;
+            }
+            if ($edge->is_active) {
+                $activeEdges[$pairKey] = $pair;
             }
         }
 
@@ -206,7 +198,13 @@ class RegisterImportPreviewer
         }
         unset($row);
 
-        return $this->buildPreview($payload, $rows);
+        $preview = $this->buildPreview($payload, $rows);
+
+        return new RegisterImportPreview(
+            $preview->payload,
+            [...$preview->summary, 'state_fingerprint' => $this->stateFingerprint->makeDependencies($payload, $processes, $assets, $edges)],
+            $preview->status,
+        );
     }
 
     /** @param array<string, list<string>> $errors */
