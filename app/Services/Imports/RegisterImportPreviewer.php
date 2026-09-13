@@ -8,6 +8,7 @@ use App\Enums\ProjectStatus;
 use App\Enums\RegisterImportKind;
 use App\Enums\RegisterImportStatus;
 use App\Enums\UserRole;
+use App\Exceptions\RegisterCsvValidationException;
 use App\Models\Asset;
 use App\Models\BusinessProcess;
 use App\Models\DependencyEdge;
@@ -34,9 +35,15 @@ class RegisterImportPreviewer
 
     public function preview(IsmsProject $project, RegisterImportKind $kind, UploadedFile $file, User $actor): RegisterImportBatch
     {
+        $parseInvalidCount = 0;
         try {
             $parsed = $this->reader->read($file, $kind);
             $parseErrors = null;
+            $sha256 = $parsed->sha256;
+        } catch (RegisterCsvValidationException $exception) {
+            $parsed = $exception->parsed;
+            $parseErrors = $exception->errors();
+            $parseInvalidCount = $exception->invalidRowCount;
             $sha256 = $parsed->sha256;
         } catch (ValidationException $exception) {
             $parsed = null;
@@ -44,10 +51,10 @@ class RegisterImportPreviewer
             $sha256 = hash_file('sha256', $file->getPathname()) ?: hash('sha256', '');
         }
 
-        return DB::transaction(function () use ($project, $kind, $actor, $parsed, $parseErrors, $sha256): RegisterImportBatch {
+        return DB::transaction(function () use ($project, $kind, $actor, $parsed, $parseErrors, $parseInvalidCount, $sha256): RegisterImportBatch {
             $lockedProject = $this->lockedWritableProject($project, $actor);
             $preview = $parsed instanceof ParsedRegisterCsv
-                ? $this->categorize($lockedProject, $parsed)
+                ? $this->withParseErrors($this->categorize($lockedProject, $parsed), $parseErrors ?? [], $parseInvalidCount)
                 : $this->rejectedPreview($parseErrors);
 
             $batch = RegisterImportBatch::query()->create([
@@ -132,10 +139,21 @@ class RegisterImportPreviewer
         $edges = DependencyEdge::query()->where('project_id', $project->id)->get();
         $existingByPair = [];
         $activeEdges = [];
+        $activeNodes = [];
+        foreach ($processes as $process) {
+            if ($process->is_active) {
+                $activeNodes['process:'.$process->id] = true;
+            }
+        }
+        foreach ($assets as $asset) {
+            if ($asset->is_active) {
+                $activeNodes['asset:'.$asset->id] = true;
+            }
+        }
         foreach ($edges as $edge) {
             $pair = $this->edgePair($edge);
             $existingByPair[$pair['source'].'>'.$pair['target']] = $edge;
-            if ($edge->is_active) {
+            if ($edge->is_active && isset($activeNodes[$pair['source']], $activeNodes[$pair['target']])) {
                 $activeEdges[$pair['source'].'>'.$pair['target']] = $pair;
             }
         }
@@ -161,32 +179,48 @@ class RegisterImportPreviewer
             $candidates[$pairKey] = ['source' => $source, 'target' => $target, 'active' => $row->values['active']];
         }
 
-        if (! collect($rows)->contains(fn (array $row): bool => $row['category'] === 'invalid')) {
-            foreach ($candidates as $pairKey => $candidate) {
-                if ($candidate['active']) {
-                    $activeEdges[$pairKey] = ['source' => $candidate['source'], 'target' => $candidate['target']];
-                } else {
-                    unset($activeEdges[$pairKey]);
-                }
-            }
-            try {
-                $this->cycleDetector->assertAcyclic([], array_values($activeEdges));
-            } catch (ValidationException) {
-                foreach ($rows as &$row) {
-                    if (isset($row['pair'], $candidates[$row['pair']]) && $candidates[$row['pair']]['active']) {
-                        $row['category'] = 'invalid';
-                        $row['code'] = 'cycle';
-                    }
-                }
-                unset($row);
+        foreach ($candidates as $pairKey => $candidate) {
+            if ($candidate['active']) {
+                $activeEdges[$pairKey] = ['source' => $candidate['source'], 'target' => $candidate['target']];
+            } else {
+                unset($activeEdges[$pairKey]);
             }
         }
+        foreach ($rows as &$row) {
+            if (isset($row['pair'], $candidates[$row['pair']]) && $candidates[$row['pair']]['active']) {
+                $candidate = $candidates[$row['pair']];
+                if ($this->cycleDetector->edgeParticipatesInCycle(array_values($activeEdges), ['source' => $candidate['source'], 'target' => $candidate['target']])) {
+                    $row['category'] = 'invalid';
+                    $row['code'] = 'cycle';
+                }
+            }
+        }
+        unset($row);
         foreach ($rows as &$row) {
             unset($row['pair']);
         }
         unset($row);
 
         return $this->buildPreview($payload, $rows);
+    }
+
+    /** @param array<string, list<string>> $errors */
+    private function withParseErrors(RegisterImportPreview $preview, array $errors, int $invalidRowCount): RegisterImportPreview
+    {
+        if ($invalidRowCount === 0) {
+            return $preview;
+        }
+
+        $rows = [...$preview->summary['rows'], ...$this->errorRows($errors)];
+        usort($rows, static fn (array $left, array $right): int => ($left['line'] ?? PHP_INT_MAX) <=> ($right['line'] ?? PHP_INT_MAX));
+        $counts = $preview->summary['counts'];
+        $counts['invalid'] += $invalidRowCount;
+
+        return new RegisterImportPreview(
+            $preview->payload,
+            ['counts' => $counts, 'rows' => array_slice($rows, 0, self::MAX_PREVIEW_ROWS)],
+            RegisterImportStatus::Rejected,
+        );
     }
 
     /**
@@ -245,6 +279,15 @@ class RegisterImportPreviewer
     /** @param array<string, list<string>> $errors */
     private function rejectedPreview(array $errors): RegisterImportPreview
     {
+        return $this->buildPreview([], $this->errorRows($errors));
+    }
+
+    /**
+     * @param  array<string, list<string>>  $errors
+     * @return list<array{line: int|null, field: string, category: string, code: string}>
+     */
+    private function errorRows(array $errors): array
+    {
         $rows = [];
         foreach (array_keys($errors) as $coordinate) {
             preg_match('/^rows\.(\d+)\.([^.]*)$/', $coordinate, $matches);
@@ -256,7 +299,7 @@ class RegisterImportPreviewer
             ];
         }
 
-        return $this->buildPreview([], array_slice($rows, 0, self::MAX_PREVIEW_ROWS));
+        return $rows;
     }
 
     private function lockedWritableProject(IsmsProject $project, User $actor): IsmsProject

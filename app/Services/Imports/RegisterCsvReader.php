@@ -4,6 +4,7 @@ namespace App\Services\Imports;
 
 use App\Data\Imports\ParsedRegisterCsv;
 use App\Enums\RegisterImportKind;
+use App\Exceptions\RegisterCsvValidationException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Validation\ValidationException;
 
@@ -69,6 +70,7 @@ class RegisterCsvReader
             $seen = [];
             $line = 2;
             $rowCount = 0;
+            $invalidRowCount = 0;
             while (($record = $this->readRecord($temporary, $delimiter)) !== null) {
                 $startLine = $line;
                 $line += $this->recordLines($record) + 1;
@@ -77,12 +79,15 @@ class RegisterCsvReader
                 }
 
                 $rowCount++;
+                $rowInvalid = false;
                 if ($rowCount > self::MAX_ROWS) {
                     $this->addError($errors, 'file', 'Die hochgeladene Datei ist nicht zulässig.');
+                    $rowInvalid = true;
                 }
 
                 if (count($record) !== count($headers)) {
                     $this->addError($errors, 'rows.'.$startLine.'.row', 'Die CSV-Zeile ist nicht zulässig.');
+                    $invalidRowCount++;
 
                     continue;
                 }
@@ -93,6 +98,7 @@ class RegisterCsvReader
                 if ($identifier !== null) {
                     if ($duplicate) {
                         $this->addError($errors, 'rows.'.$startLine.'.'.$this->duplicateField($kind), 'Die CSV-Zeile ist nicht zulässig.');
+                        $rowInvalid = true;
                     } else {
                         $seen[$identifier] = true;
                     }
@@ -104,9 +110,13 @@ class RegisterCsvReader
                         $rows[] = $row;
                     }
                 } catch (ValidationException $exception) {
+                    $rowInvalid = true;
                     foreach ($exception->errors() as $field => $messages) {
                         $this->addError($errors, $field, $messages[0]);
                     }
+                }
+                if ($rowInvalid) {
+                    $invalidRowCount++;
                 }
             }
 
@@ -114,11 +124,16 @@ class RegisterCsvReader
                 $this->fileRejected();
             }
 
-            if ($errors !== []) {
+            $sha256 = hash_final($hash);
+            if (isset($errors['file'])) {
                 throw ValidationException::withMessages($errors);
             }
+            $parsed = new ParsedRegisterCsv($kind, $sha256, $headers, $rows);
+            if ($errors !== []) {
+                throw RegisterCsvValidationException::withParsed($parsed, $errors, $invalidRowCount);
+            }
 
-            return new ParsedRegisterCsv($kind, hash_final($hash), $headers, $rows);
+            return $parsed;
         } finally {
             fclose($input);
             fclose($temporary);
