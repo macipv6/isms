@@ -11,7 +11,9 @@ use App\Models\IsmsProject;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\Dependencies\DependencyGraph;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class DependencyTraversalTest extends TestCase
@@ -95,6 +97,38 @@ class DependencyTraversalTest extends TestCase
             ['asset:ACTIVE:1', 'asset:INACTIVE:1'],
             $this->keys($graph->dependencies($project, DependencyNode::process($root), transitive: true, includeInactive: true)),
         );
+    }
+
+    public function test_wide_historical_frontiers_use_fixed_size_where_in_chunks(): void
+    {
+        [$project, $actor] = $this->context();
+        $root = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'ROOT']);
+        $firstLevel = Asset::factory()->count(125)->for($project, 'project')->sequence(
+            fn ($sequence): array => ['key' => sprintf('L1-%03d', $sequence->index), 'is_active' => $sequence->index % 10 !== 0],
+        )->create();
+        $secondLevel = Asset::factory()->count(125)->for($project, 'project')->sequence(
+            fn ($sequence): array => ['key' => sprintf('L2-%03d', $sequence->index)],
+        )->create();
+        foreach ($firstLevel as $index => $asset) {
+            $this->edge($project, $actor, $root, $asset);
+            $this->edge($project, $actor, $asset, $secondLevel[$index]);
+        }
+        $whereInWidths = [];
+        DB::listen(function (QueryExecuted $query) use (&$whereInWidths): void {
+            if (! str_contains($query->sql, 'from "dependency_edges"')) {
+                return;
+            }
+            preg_match_all('/"(?:source|target)_(?:process|asset)_id" in \(([^)]*)\)/', $query->sql, $matches);
+            foreach ($matches[1] as $placeholders) {
+                $whereInWidths[] = substr_count($placeholders, '?');
+            }
+        });
+
+        $hits = app(DependencyGraph::class)->dependencies($project, DependencyNode::process($root), transitive: true, includeInactive: true);
+
+        $this->assertCount(250, $hits);
+        $this->assertNotEmpty($whereInWidths);
+        $this->assertLessThanOrEqual(100, max($whereInWidths));
     }
 
     /** @param array<int, mixed> $hits */
