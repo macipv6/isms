@@ -6,6 +6,7 @@ use App\Enums\ProjectStatus;
 use App\Enums\UserRole;
 use App\Models\Asset;
 use App\Models\BusinessProcess;
+use App\Models\DependencyEdge;
 use App\Models\IsmsProject;
 use App\Models\Organization;
 use App\Models\User;
@@ -95,6 +96,31 @@ class RegisterPagesTest extends TestCase
         $this->actingAs($customerUser)->get($this->url($customer, $project, 'processes'))->assertForbidden();
         $otherCustomer = Organization::factory()->create(['organization_type' => 'customer', 'entra_tenant_id' => null]);
         $this->actingAs($actor)->get($this->url($otherCustomer, $project, 'assets'))->assertNotFound();
+    }
+
+    public function test_pagination_links_keep_only_validated_allowlisted_query_parameters(): void
+    {
+        [$customer, $project, $actor] = $this->context();
+        BusinessProcess::factory()->count(26)->for($project, 'project')->create();
+        Asset::factory()->count(26)->for($project, 'project')->create();
+        DependencyEdge::factory()->count(26)->for($project, 'project')->create();
+        $secret = 'owner@example.test';
+
+        foreach ([
+            ['processes', 'processes.links.next'],
+            ['assets', 'assets.links.next'],
+            ['dependencies', 'dependencies.links.next'],
+        ] as [$register, $linkProp]) {
+            $this->actingAs($actor)
+                ->get($this->url($customer, $project, $register).'?state=active&owner_email='.$secret.'&file=private.csv&raw_row=secret')
+                ->assertOk()
+                ->assertInertia(fn (Assert $page): Assert => $page
+                    ->where($linkProp, fn (mixed $link): bool => is_string($link)
+                        && str_contains($link, 'state=active')
+                        && ! str_contains($link, 'owner_email')
+                        && ! str_contains($link, 'private.csv')
+                        && ! str_contains($link, 'raw_row')));
+        }
     }
 
     /** @return array{Organization, IsmsProject, User} */
