@@ -3,6 +3,7 @@
 namespace Tests\Feature\Imports;
 
 use App\Enums\DependencyImportance;
+use App\Enums\ProjectStatus;
 use App\Enums\RegisterImportKind;
 use App\Enums\RegisterImportStatus;
 use App\Models\Asset;
@@ -14,6 +15,8 @@ use App\Models\Organization;
 use App\Models\RegisterImportBatch;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
+use App\Services\Dependencies\DependencyCycleDetector;
+use App\Services\Dependencies\DependencyGraph;
 use App\Services\Imports\RegisterImportConfirmer;
 use App\Services\Imports\RegisterImportPreviewer;
 use Illuminate\Database\Events\QueryExecuted;
@@ -58,26 +61,85 @@ class DependencyImportAtomicityTest extends TestCase
         }
     }
 
-    public function test_complete_final_graph_is_checked_once_before_the_first_edge_write(): void
+    public function test_omitted_edge_endpoint_state_change_after_preview_rejects_every_write(): void
     {
         [$project, $actor] = $this->context();
         $p1 = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P1']);
         $p2 = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P2']);
         $p3 = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P3']);
         $p4 = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P4']);
-        $omitted = $this->edge($project, $actor, $p3, $p1);
+        $omitted = $this->edge($project, $actor, $p1, $p2);
         $batch = $this->preview($project, $actor, [
-            'process,P1,process,P2,critical,,true',
-            'process,P2,process,P3,critical,,true',
-            'process,P3,process,P4,supporting,,true',
+            'process,P3,process,P4,critical,reviewed,true',
         ]);
-        $this->assertSame(RegisterImportStatus::Rejected, $batch->status);
+        $this->assertSame(RegisterImportStatus::Pending, $batch->status);
+        $p2->update(['is_active' => false]);
 
         $this->expectImportRejection(fn () => app(RegisterImportConfirmer::class)->confirm($batch, $actor));
 
         $this->assertDatabaseCount('dependency_edges', 1);
         $this->assertDatabaseHas('dependency_edges', ['id' => $omitted->id, 'is_active' => true]);
-        $this->assertSame(RegisterImportStatus::Rejected, $batch->fresh()->status);
+        $this->assertDatabaseMissing('dependency_edges', [
+            'project_id' => $project->id,
+            'source_process_id' => $p3->id,
+            'target_process_id' => $p4->id,
+        ]);
+        $this->assertSame(RegisterImportStatus::Pending, $batch->fresh()->status);
+    }
+
+    public function test_writable_project_state_change_after_preview_rejects_every_write(): void
+    {
+        [$project, $actor] = $this->context();
+        $p1 = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P1']);
+        $p2 = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P2']);
+        $batch = $this->preview($project, $actor, [
+            'process,P1,process,P2,critical,reviewed,true',
+        ]);
+        $this->assertSame(RegisterImportStatus::Pending, $batch->status);
+        $project->update(['status' => ProjectStatus::Active]);
+
+        $this->expectImportRejection(fn () => app(RegisterImportConfirmer::class)->confirm($batch, $actor));
+
+        $this->assertDatabaseCount('dependency_edges', 0);
+        $this->assertSame(RegisterImportStatus::Pending, $batch->fresh()->status);
+    }
+
+    public function test_confirmable_final_graph_is_checked_once_before_the_first_edge_write(): void
+    {
+        [$project, $actor] = $this->context();
+        $p1 = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P1']);
+        $p2 = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P2']);
+        $p3 = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P3']);
+        $p4 = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P4']);
+        $this->edge($project, $actor, $p1, $p2);
+        $batch = $this->preview($project, $actor, [
+            'process,P3,process,P4,critical,reviewed,true',
+        ]);
+        $this->assertSame(RegisterImportStatus::Pending, $batch->status);
+        $detector = new class(app(DependencyGraph::class)) extends DependencyCycleDetector
+        {
+            public int $calls = 0;
+
+            public int $databaseEdgesAtCheck = -1;
+
+            public int $finalEdgesAtCheck = -1;
+
+            public function assertAcyclic(array $existingEdges, array $candidateEdges): void
+            {
+                $this->calls++;
+                $this->databaseEdgesAtCheck = DependencyEdge::query()->count();
+                $this->finalEdgesAtCheck = count($existingEdges) + count($candidateEdges);
+                parent::assertAcyclic($existingEdges, $candidateEdges);
+            }
+        };
+        $this->app->instance(DependencyCycleDetector::class, $detector);
+
+        app(RegisterImportConfirmer::class)->confirm($batch, $actor);
+
+        $this->assertSame(1, $detector->calls);
+        $this->assertSame(1, $detector->databaseEdgesAtCheck);
+        $this->assertSame(2, $detector->finalEdgesAtCheck);
+        $this->assertDatabaseCount('dependency_edges', 2);
     }
 
     public function test_confirmation_locks_batch_then_project_before_reading_or_writing_edges(): void
