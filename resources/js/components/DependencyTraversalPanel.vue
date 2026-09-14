@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
+import FormErrorList from '@/components/FormErrorList.vue';
 import type {
     DependencyNodeType,
     DependencyTraversalData,
@@ -93,13 +94,18 @@ function inspect(): void {
                 </button>
             </div>
         </form>
-        <p
-            v-for="message in Object.values(form.errors)"
-            :key="message"
-            class="mt-2 text-sm text-red-200"
-        >
-            {{ message }}
-        </p>
+        <FormErrorList
+            :errors="form.errors"
+            :labels="{
+                node_type: 'Elementtyp',
+                node_key: 'Stabiler Schlüssel',
+                direction: 'Richtung',
+                transitive: 'Tiefe',
+                include_inactive: 'Historie',
+            }"
+            class="mt-3"
+            title="Die Abhängigkeitsauswertung konnte nicht geladen werden."
+        />
         <div v-if="traversal" class="mt-5 overflow-x-auto">
             <p class="mb-3 text-sm text-slate-400">
                 Ausgangspunkt:

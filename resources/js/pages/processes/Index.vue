@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import FormErrorList from '@/components/FormErrorList.vue';
 import ProjectWorkNavigation from '@/components/ProjectWorkNavigation.vue';
 import RegisterImportPanel from '@/components/RegisterImportPanel.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
@@ -49,6 +50,16 @@ const editForm = useForm({
     updated_at: props.editRecord?.updated_at ?? '',
 });
 const statusForm = useForm({ active: false });
+const fieldLabels: Record<string, string> = {
+    key: 'Schlüssel',
+    state: 'Statusfilter',
+    name: 'Name',
+    description: 'Beschreibung',
+    owner_name: 'Verantwortlich',
+    owner_email: 'E-Mail',
+    updated_at: 'Bearbeitungsstand',
+    active: 'Status',
+};
 const visible = computed(() => {
     const search = localSearch.value.trim().toLocaleLowerCase('de-DE');
     return search === ''
@@ -149,13 +160,11 @@ function changeStatus(item: ProcessItem): void {
             >
                 Filter anwenden
             </button>
-            <p
-                v-for="message in Object.values(filterForm.errors)"
-                :key="message"
-                class="text-sm text-red-200"
-            >
-                {{ message }}
-            </p>
+            <FormErrorList
+                :errors="filterForm.errors"
+                :labels="fieldLabels"
+                class="md:col-span-4"
+            />
         </form>
 
         <form
@@ -193,13 +202,11 @@ function changeStatus(item: ProcessItem): void {
                     class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"
                 />
             </label>
-            <p
-                v-for="message in Object.values(createForm.errors)"
-                :key="message"
-                class="text-sm text-red-200"
-            >
-                {{ message }}
-            </p>
+            <FormErrorList
+                :errors="createForm.errors"
+                :labels="fieldLabels"
+                class="md:col-span-2"
+            />
             <button
                 class="rounded-lg bg-emerald-500 px-4 py-2 font-semibold text-slate-950"
             >
@@ -238,13 +245,12 @@ function changeStatus(item: ProcessItem): void {
                     class="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"
                 />
             </label>
-            <p
-                v-for="message in Object.values(editForm.errors)"
-                :key="message"
-                class="text-sm text-red-200"
-            >
-                {{ message }}
-            </p>
+            <FormErrorList
+                :errors="editForm.errors"
+                :labels="fieldLabels"
+                class="md:col-span-2"
+                title="Die Änderungen konnten nicht gespeichert werden."
+            />
             <button
                 class="rounded-lg bg-cyan-500 px-4 py-2 font-semibold text-slate-950"
             >
@@ -272,12 +278,14 @@ function changeStatus(item: ProcessItem): void {
                             {{ item.active ? 'Aktiv' : 'Inaktiv' }}
                         </td>
                         <td class="px-4 py-3">
-                            <div v-if="capabilities.edit" class="flex gap-3">
+                            <div class="flex gap-3">
                                 <Link
+                                    v-if="capabilities.edit"
                                     :href="`${base}?edit=${item.id}`"
                                     class="text-cyan-300"
                                     >Bearbeiten</Link
                                 ><button
+                                    v-if="capabilities.changeStatus"
                                     type="button"
                                     class="text-amber-200"
                                     @click="changeStatus(item)"
@@ -294,6 +302,12 @@ function changeStatus(item: ProcessItem): void {
                 </tbody>
             </table>
         </div>
+        <FormErrorList
+            :errors="statusForm.errors"
+            :labels="fieldLabels"
+            class="mt-4"
+            title="Der Status konnte nicht geändert werden."
+        />
         <div class="mt-4 flex justify-between text-sm">
             <Link
                 v-if="processes.links.previous"

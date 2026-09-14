@@ -42,7 +42,8 @@ class RegisterPresenter
             ->select(['id', 'project_id', 'key', 'name', 'description', 'owner_name', 'is_active', 'updated_at'])
             ->where('project_id', $project->id);
         $this->applyBaseFilters($query, $validated);
-        $paginator = $query->orderBy('key')->paginate(self::PER_PAGE)->withQueryString();
+        $paginator = $query->orderBy('key')->paginate(self::PER_PAGE);
+        $paginator->appends($this->paginationQuery($validated, ['key', 'state', 'edit', 'batch']));
         $base = $this->baseUrl($organization, $project);
 
         return [
@@ -77,7 +78,8 @@ class RegisterPresenter
             ->where('project_id', $project->id);
         $this->applyBaseFilters($query, $validated);
         $query->when($validated['type'] ?? null, fn (Builder $builder, string $type) => $builder->where('type', $type));
-        $paginator = $query->orderBy('key')->paginate(self::PER_PAGE)->withQueryString();
+        $paginator = $query->orderBy('key')->paginate(self::PER_PAGE);
+        $paginator->appends($this->paginationQuery($validated, ['key', 'state', 'type', 'edit', 'batch']));
         $base = $this->baseUrl($organization, $project);
 
         return [
@@ -127,7 +129,11 @@ class RegisterPresenter
                 'targetProcess:id,project_id,key,name', 'targetAsset:id,project_id,key,name',
             ]);
         $this->applyDependencyFilters($query, $validated);
-        $paginator = $query->orderByDesc('created_at')->orderBy('id')->paginate(self::PER_PAGE)->withQueryString();
+        $paginator = $query->orderByDesc('created_at')->orderBy('id')->paginate(self::PER_PAGE);
+        $paginator->appends($this->paginationQuery($validated, [
+            'key', 'state', 'source_type', 'target_type', 'importance', 'edit', 'batch',
+            'node_type', 'node_key', 'direction', 'transitive', 'include_inactive',
+        ]));
         $base = $this->baseUrl($organization, $project);
 
         return [
@@ -244,6 +250,24 @@ class RegisterPresenter
     private function filters(array $validated): array
     {
         return ['key' => $validated['key'] ?? null, 'state' => $validated['state'] ?? null];
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @param  list<string>  $keys
+     * @return array<string, string|int>
+     */
+    private function paginationQuery(array $validated, array $keys): array
+    {
+        $query = [];
+        foreach ($keys as $key) {
+            $value = $validated[$key] ?? null;
+            if (is_string($value) || is_int($value)) {
+                $query[$key] = $value;
+            }
+        }
+
+        return $query;
     }
 
     /** @return array<string, mixed>|null */

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
+import FormErrorList from '@/components/FormErrorList.vue';
 import RegisterImportPreview from '@/components/RegisterImportPreview.vue';
 import type { RegisterImportPreviewData } from '@/types/registers';
 
@@ -63,6 +64,12 @@ function upload(): void {
                         : 'Vorschau erstellen'
                 }}
             </button>
+            <FormErrorList
+                :errors="uploadForm.errors"
+                :labels="{ file: 'CSV-Datei', import: 'Import' }"
+                class="sm:w-full"
+                title="Die CSV-Datei konnte nicht geprüft werden."
+            />
         </form>
         <p v-else class="mt-4 text-sm text-amber-200">
             In diesem Projektzustand sind keine neuen Importe möglich.

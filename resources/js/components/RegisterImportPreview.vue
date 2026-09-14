@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
+import FormErrorList from '@/components/FormErrorList.vue';
 import type { RegisterImportPreviewData } from '@/types/registers';
 
 const props = defineProps<{ preview: RegisterImportPreviewData }>();
@@ -103,9 +104,11 @@ function confirm(): void {
                     : 'Import verbindlich übernehmen'
             }}
         </button>
-        <p v-if="confirmForm.hasErrors" class="mt-3 text-sm text-red-200">
-            Der Import konnte nicht übernommen werden. Bitte laden Sie die Seite
-            neu.
-        </p>
+        <FormErrorList
+            :errors="confirmForm.errors"
+            :labels="{ import: 'Import' }"
+            class="mt-3"
+            title="Der Import konnte nicht übernommen werden."
+        />
     </section>
 </template>
