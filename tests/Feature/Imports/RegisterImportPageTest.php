@@ -46,7 +46,7 @@ class RegisterImportPageTest extends TestCase
                 ->missing('importPreview.created_by')
                 ->missing('importPreview.state_fingerprint'));
 
-        $responseJson = json_encode($this->actingAs($actor)->get($this->url($customer, $project, 'processes').'?batch='.$batch->id)->json());
+        $responseJson = $this->actingAs($actor)->get($this->url($customer, $project, 'processes').'?batch='.$batch->id)->getContent();
         $this->assertStringNotContainsString('PAYLOAD-SECRET', $responseJson);
         $this->assertStringNotContainsString('SECRET-FINGERPRINT', $responseJson);
         $this->assertStringNotContainsString('secret2@example.test', $responseJson);
@@ -69,7 +69,7 @@ class RegisterImportPageTest extends TestCase
     {
         [$customer, $project, $actor] = $this->context(status: ProjectStatus::Archived);
         $batch = RegisterImportBatch::factory()->for($project, 'project')->for($actor, 'creator')->create([
-            'expires_at' => now()->subMinute(),
+            'expires_at' => now('UTC')->subMinute(),
             'summary' => ['counts' => ['new' => 1, 'changed' => 0, 'unchanged' => 0, 'invalid' => 0], 'rows' => []],
         ]);
 

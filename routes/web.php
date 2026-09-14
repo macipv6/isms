@@ -3,10 +3,13 @@
 use App\Http\Controllers\AssessmentAnswerController;
 use App\Http\Controllers\AssessmentController;
 use App\Http\Controllers\AssetController;
+use App\Http\Controllers\AssetRegisterController;
 use App\Http\Controllers\Auth\EntraAuthController;
 use App\Http\Controllers\BusinessProcessController;
+use App\Http\Controllers\BusinessProcessRegisterController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DependencyController;
+use App\Http\Controllers\DependencyRegisterController;
 use App\Http\Controllers\EvidenceController;
 use App\Http\Controllers\EvidenceRegisterController;
 use App\Http\Controllers\FindingController;
@@ -45,6 +48,9 @@ Route::middleware(['auth', 'active-user'])->group(function (): void {
     Route::get('/organizations/{organization}/projects/{project}/evidence', EvidenceRegisterController::class)->name('evidence.index');
     Route::get('/organizations/{organization}/projects/{project}/findings', FindingRegisterController::class)->name('findings.index');
     Route::get('/organizations/{organization}/projects/{project}/measures', MeasureRegisterController::class)->name('measures.index');
+    Route::get('/organizations/{organization}/projects/{project}/processes', BusinessProcessRegisterController::class)->name('processes.index');
+    Route::get('/organizations/{organization}/projects/{project}/assets', AssetRegisterController::class)->name('assets.index');
+    Route::get('/organizations/{organization}/projects/{project}/dependencies', DependencyRegisterController::class)->name('dependencies.index');
 
     Route::post('/organizations/{organization}/projects/{project}/processes', [BusinessProcessController::class, 'store'])->name('processes.store');
     Route::put('/organizations/{organization}/projects/{project}/processes/{process}', [BusinessProcessController::class, 'update'])->name('processes.update');

@@ -2,7 +2,10 @@ export type ProjectWorkTab =
     | 'assessment'
     | 'evidence'
     | 'findings'
-    | 'measures';
+    | 'measures'
+    | 'processes'
+    | 'assets'
+    | 'dependencies';
 
 export type EvidenceReviewStatus = 'pending_review' | 'verified' | 'rejected';
 export type EvidenceFileKind =

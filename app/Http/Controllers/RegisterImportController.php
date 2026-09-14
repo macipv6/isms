@@ -30,13 +30,16 @@ class RegisterImportController extends Controller
         abort_unless($file !== null, 422);
         $batch = $previewer->preview($project, $request->kind(), $file, $this->actor($request));
 
-        return redirect()->route('register-imports.show', [$organization, $project, $batch]);
+        return redirect()->route($this->indexRoute($batch), [$organization, $project, 'batch' => $batch->id]);
     }
 
-    public function show(Request $request, Organization $organization, IsmsProject $project, RegisterImportBatch $batch): JsonResponse
+    public function show(Request $request, Organization $organization, IsmsProject $project, RegisterImportBatch $batch): JsonResponse|RedirectResponse
     {
         abort_unless($organization->organization_type === 'customer' && $project->organization_id === $organization->id && $batch->project_id === $project->id, 404);
         Gate::authorize('view', $batch);
+        if ($request->header('X-Inertia') !== null) {
+            return redirect()->route($this->indexRoute($batch), [$organization, $project, 'batch' => $batch->id]);
+        }
         $project->loadMissing('organization');
         $expired = $batch->expires_at->getTimestamp() <= now('UTC')->getTimestamp();
         $canConfirm = $batch->status === RegisterImportStatus::Pending
@@ -73,5 +76,14 @@ class RegisterImportController extends Controller
         abort_unless($actor instanceof User, 401);
 
         return $actor;
+    }
+
+    private function indexRoute(RegisterImportBatch $batch): string
+    {
+        return match ($batch->kind->value) {
+            'processes' => 'processes.index',
+            'assets' => 'assets.index',
+            'dependencies' => 'dependencies.index',
+        };
     }
 }
