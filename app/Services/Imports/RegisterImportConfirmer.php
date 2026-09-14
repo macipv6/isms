@@ -52,7 +52,7 @@ class RegisterImportConfirmer
                     $state = $this->lockedDependencyState($project, $rows);
                     $counts = $this->dependencyCounts($state['rows']);
                     if (! $this->sameCounts($counts, $lockedBatch->summary['counts'] ?? null)
-                        || ! $this->sameDependencyFingerprint($rows, $state, $lockedBatch->summary['state_fingerprint'] ?? null)) {
+                        || ! $this->sameDependencyFingerprint($project, $rows, $state, $lockedBatch->summary['state_fingerprint'] ?? null)) {
                         $this->reject();
                     }
                     $this->assertFinalDependencyGraphIsAcyclic($state);
@@ -178,27 +178,17 @@ class RegisterImportConfirmer
             }
         }
 
-        /** @var Collection<string, BusinessProcess> $processes */
-        $processes = BusinessProcess::query()
-            ->where('project_id', $project->id)
-            ->whereIn('key', array_values(array_unique($processKeys)))
-            ->lockForUpdate()
-            ->get()
-            ->keyBy('key');
-        /** @var Collection<string, Asset> $assets */
-        $assets = Asset::query()
-            ->where('project_id', $project->id)
-            ->whereIn('key', array_values(array_unique($assetKeys)))
-            ->lockForUpdate()
-            ->get()
-            ->keyBy('key');
         /** @var Collection<int, DependencyEdge> $edges */
-        $edges = DependencyEdge::query()
+        $edges = collect();
+        DependencyEdge::query()
             ->where('project_id', $project->id)
             ->oldest('created_at')
             ->oldest('id')
             ->lockForUpdate()
-            ->get();
+            ->chunk(500, function ($chunk) use ($edges): void {
+                $edges->push(...$chunk);
+            });
+        [$processes, $assets] = $this->lockedDependencyEndpoints($project, $processKeys, $assetKeys, $edges);
 
         $existingByPair = [];
         foreach ($edges as $edge) {
@@ -222,6 +212,58 @@ class RegisterImportConfirmer
         }
 
         return ['processes' => $processes, 'assets' => $assets, 'edges' => $edges, 'rows' => $resolvedRows];
+    }
+
+    /**
+     * @param  list<string>  $processKeys
+     * @param  list<string>  $assetKeys
+     * @param  Collection<int, DependencyEdge>  $edges
+     * @return array{Collection<string, BusinessProcess>, Collection<string, Asset>}
+     */
+    private function lockedDependencyEndpoints(IsmsProject $project, array $processKeys, array $assetKeys, Collection $edges): array
+    {
+        $processIds = [];
+        $assetIds = [];
+        foreach ($edges as $edge) {
+            foreach ([$edge->source_process_id, $edge->target_process_id] as $id) {
+                if ($id !== null) {
+                    $processIds[] = $id;
+                }
+            }
+            foreach ([$edge->source_asset_id, $edge->target_asset_id] as $id) {
+                if ($id !== null) {
+                    $assetIds[] = $id;
+                }
+            }
+        }
+
+        /** @var Collection<string, BusinessProcess> $processes */
+        $processes = collect();
+        foreach (array_chunk(array_values(array_unique($processKeys)), 500) as $keys) {
+            foreach (BusinessProcess::query()->where('project_id', $project->id)->whereIn('key', $keys)->lockForUpdate()->get() as $process) {
+                $processes->put($process->key, $process);
+            }
+        }
+        foreach (array_chunk(array_values(array_unique($processIds)), 500) as $ids) {
+            foreach (BusinessProcess::query()->where('project_id', $project->id)->whereIn('id', $ids)->lockForUpdate()->get() as $process) {
+                $processes->put($process->key, $process);
+            }
+        }
+
+        /** @var Collection<string, Asset> $assets */
+        $assets = collect();
+        foreach (array_chunk(array_values(array_unique($assetKeys)), 500) as $keys) {
+            foreach (Asset::query()->where('project_id', $project->id)->whereIn('key', $keys)->lockForUpdate()->get() as $asset) {
+                $assets->put($asset->key, $asset);
+            }
+        }
+        foreach (array_chunk(array_values(array_unique($assetIds)), 500) as $ids) {
+            foreach (Asset::query()->where('project_id', $project->id)->whereIn('id', $ids)->lockForUpdate()->get() as $asset) {
+                $assets->put($asset->key, $asset);
+            }
+        }
+
+        return [$processes, $assets];
     }
 
     /**
@@ -266,10 +308,10 @@ class RegisterImportConfirmer
      * @param  list<array<string, string|bool|null>>  $rows
      * @param  array{processes: Collection<string, BusinessProcess>, assets: Collection<string, Asset>, edges: Collection<int, DependencyEdge>}  $state
      */
-    private function sameDependencyFingerprint(array $rows, array $state, mixed $reviewed): bool
+    private function sameDependencyFingerprint(IsmsProject $project, array $rows, array $state, mixed $reviewed): bool
     {
         return is_string($reviewed)
-            && hash_equals($reviewed, $this->stateFingerprint->makeDependencies($rows, $state['processes'], $state['assets'], $state['edges']));
+            && hash_equals($reviewed, $this->stateFingerprint->makeDependencies($project, $rows, $state['processes'], $state['assets'], $state['edges']));
     }
 
     /**

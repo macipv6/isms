@@ -141,9 +141,26 @@ class RegisterImportPreviewer
 
     private function categorizeDependencies(IsmsProject $project, ParsedRegisterCsv $parsed): RegisterImportPreview
     {
-        $processes = BusinessProcess::query()->where('project_id', $project->id)->get()->keyBy('key');
-        $assets = Asset::query()->where('project_id', $project->id)->get()->keyBy('key');
-        $edges = DependencyEdge::query()->where('project_id', $project->id)->oldest('created_at')->oldest('id')->get();
+        $processes = collect();
+        BusinessProcess::query()->where('project_id', $project->id)->chunkById(500, function ($chunk) use ($processes): void {
+            foreach ($chunk as $process) {
+                $processes->put($process->key, $process);
+            }
+        });
+        $assets = collect();
+        Asset::query()->where('project_id', $project->id)->chunkById(500, function ($chunk) use ($assets): void {
+            foreach ($chunk as $asset) {
+                $assets->put($asset->key, $asset);
+            }
+        });
+        $edges = collect();
+        DependencyEdge::query()
+            ->where('project_id', $project->id)
+            ->oldest('created_at')
+            ->oldest('id')
+            ->chunk(500, function ($chunk) use ($edges): void {
+                $edges->push(...$chunk);
+            });
         $existingByPair = [];
         $activeEdges = [];
         foreach ($edges as $edge) {
@@ -202,7 +219,7 @@ class RegisterImportPreviewer
 
         return new RegisterImportPreview(
             $preview->payload,
-            [...$preview->summary, 'state_fingerprint' => $this->stateFingerprint->makeDependencies($payload, $processes, $assets, $edges)],
+            [...$preview->summary, 'state_fingerprint' => $this->stateFingerprint->makeDependencies($project, $payload, $processes, $assets, $edges)],
             $preview->status,
         );
     }

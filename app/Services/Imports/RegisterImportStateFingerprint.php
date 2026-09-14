@@ -6,6 +6,7 @@ use App\Enums\RegisterImportKind;
 use App\Models\Asset;
 use App\Models\BusinessProcess;
 use App\Models\DependencyEdge;
+use App\Models\IsmsProject;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use JsonException;
@@ -50,23 +51,39 @@ class RegisterImportStateFingerprint
      *
      * @throws JsonException
      */
-    public function makeDependencies(array $rows, Collection $processes, Collection $assets, Collection $edges): string
+    public function makeDependencies(IsmsProject $project, array $rows, Collection $processes, Collection $assets, Collection $edges): string
     {
+        $processesById = $processes->keyBy('id');
+        $assetsById = $assets->keyBy('id');
         $endpoints = [];
         foreach ($rows as $row) {
             foreach (['source', 'target'] as $side) {
                 $type = $row[$side.'_type'];
                 $key = $row[$side.'_key'];
                 $record = $type === 'process' ? $processes->get($key) : $assets->get($key);
-                $endpoints[$type.':'.$key] = $record instanceof Model
-                    ? ['exists' => true, 'id' => $record->getKey(), 'active' => (bool) $record->getAttribute('is_active')]
+                $identity = $record instanceof Model ? $type.':'.$record->getKey() : $type.':missing:'.$key;
+                $endpoints[$identity] = $record instanceof Model
+                    ? $this->dependencyEndpointState($record)
                     : ['exists' => false];
             }
         }
-        ksort($endpoints);
 
         $edgeStates = [];
         foreach ($edges as $edge) {
+            foreach ([
+                ['process', $edge->source_process_id],
+                ['asset', $edge->source_asset_id],
+                ['process', $edge->target_process_id],
+                ['asset', $edge->target_asset_id],
+            ] as [$type, $id]) {
+                if ($id === null) {
+                    continue;
+                }
+                $record = $type === 'process' ? $processesById->get($id) : $assetsById->get($id);
+                $endpoints[$type.':'.$id] = $record instanceof Model
+                    ? $this->dependencyEndpointState($record)
+                    : ['exists' => false];
+            }
             $edgeStates[$edge->id] = [
                 'source_process_id' => $edge->source_process_id,
                 'source_asset_id' => $edge->source_asset_id,
@@ -77,13 +94,39 @@ class RegisterImportStateFingerprint
                 'active' => $edge->is_active,
             ];
         }
+        ksort($endpoints);
         ksort($edgeStates);
+
+        $projectState = [
+            'id' => $project->id,
+            'organization_id' => $project->organization_id,
+            'status' => $project->status->value,
+            'organization_type' => $project->organization?->organization_type,
+            'organization_active' => (bool) $project->organization?->is_active,
+        ];
+        ksort($projectState);
 
         return hash_hmac(
             'sha256',
-            json_encode(['kind' => RegisterImportKind::Dependencies->value, 'endpoints' => $endpoints, 'edges' => $edgeStates], JSON_THROW_ON_ERROR),
+            json_encode([
+                'kind' => RegisterImportKind::Dependencies->value,
+                'project' => $projectState,
+                'endpoints' => $endpoints,
+                'edges' => $edgeStates,
+            ], JSON_THROW_ON_ERROR),
             (string) config('app.key'),
         );
+    }
+
+    /** @return array{exists: true, id: mixed, key: mixed, active: bool} */
+    private function dependencyEndpointState(Model $record): array
+    {
+        return [
+            'exists' => true,
+            'id' => $record->getKey(),
+            'key' => $record->getAttribute('key'),
+            'active' => (bool) $record->getAttribute('is_active'),
+        ];
     }
 
     /** @return array<string, string|bool|null> */
