@@ -182,7 +182,9 @@ class RegisterPresenter
      */
     private function applyBaseFilters(Builder $query, array $validated): void
     {
-        $query->when($validated['key'] ?? null, fn (Builder $builder, string $key) => $builder->where('key', 'ilike', $this->keySearchPattern($key)));
+        if (isset($validated['key'])) {
+            $query->where('key', 'ilike', $this->keySearchPattern($validated['key']));
+        }
         if (isset($validated['state'])) {
             $query->where('is_active', $validated['state'] === 'active');
         }
