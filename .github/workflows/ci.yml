@@ -87,3 +87,6 @@ jobs:
 
       - name: Frontend production build
         run: npm run build
+
+      - name: Verify Docker Compose configuration
+        run: docker compose config --quiet

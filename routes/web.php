@@ -2,8 +2,14 @@
 
 use App\Http\Controllers\AssessmentAnswerController;
 use App\Http\Controllers\AssessmentController;
+use App\Http\Controllers\AssetController;
+use App\Http\Controllers\AssetRegisterController;
 use App\Http\Controllers\Auth\EntraAuthController;
+use App\Http\Controllers\BusinessProcessController;
+use App\Http\Controllers\BusinessProcessRegisterController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DependencyController;
+use App\Http\Controllers\DependencyRegisterController;
 use App\Http\Controllers\EvidenceController;
 use App\Http\Controllers\EvidenceRegisterController;
 use App\Http\Controllers\FindingController;
@@ -12,6 +18,7 @@ use App\Http\Controllers\IsmsProjectController;
 use App\Http\Controllers\MeasureController;
 use App\Http\Controllers\MeasureRegisterController;
 use App\Http\Controllers\OrganizationController;
+use App\Http\Controllers\RegisterImportController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/login');
@@ -41,6 +48,23 @@ Route::middleware(['auth', 'active-user'])->group(function (): void {
     Route::get('/organizations/{organization}/projects/{project}/evidence', EvidenceRegisterController::class)->name('evidence.index');
     Route::get('/organizations/{organization}/projects/{project}/findings', FindingRegisterController::class)->name('findings.index');
     Route::get('/organizations/{organization}/projects/{project}/measures', MeasureRegisterController::class)->name('measures.index');
+    Route::get('/organizations/{organization}/projects/{project}/processes', BusinessProcessRegisterController::class)->name('processes.index');
+    Route::get('/organizations/{organization}/projects/{project}/assets', AssetRegisterController::class)->name('assets.index');
+    Route::get('/organizations/{organization}/projects/{project}/dependencies', DependencyRegisterController::class)->name('dependencies.index');
+
+    Route::post('/organizations/{organization}/projects/{project}/processes', [BusinessProcessController::class, 'store'])->name('processes.store');
+    Route::put('/organizations/{organization}/projects/{project}/processes/{process}', [BusinessProcessController::class, 'update'])->name('processes.update');
+    Route::patch('/organizations/{organization}/projects/{project}/processes/{process}/status', [BusinessProcessController::class, 'status'])->name('processes.status');
+    Route::post('/organizations/{organization}/projects/{project}/assets', [AssetController::class, 'store'])->name('assets.store');
+    Route::put('/organizations/{organization}/projects/{project}/assets/{asset}', [AssetController::class, 'update'])->name('assets.update');
+    Route::patch('/organizations/{organization}/projects/{project}/assets/{asset}/status', [AssetController::class, 'status'])->name('assets.status');
+    Route::post('/organizations/{organization}/projects/{project}/dependencies', [DependencyController::class, 'store'])->name('dependencies.store');
+    Route::put('/organizations/{organization}/projects/{project}/dependencies/{dependency}', [DependencyController::class, 'update'])->name('dependencies.update');
+    Route::patch('/organizations/{organization}/projects/{project}/dependencies/{dependency}/status', [DependencyController::class, 'status'])->name('dependencies.status');
+    Route::get('/organizations/{organization}/projects/{project}/dependencies/{type}/{key}/graph', [DependencyController::class, 'graph'])->name('dependencies.graph');
+    Route::post('/organizations/{organization}/projects/{project}/imports/{kind}/preview', [RegisterImportController::class, 'preview'])->name('register-imports.preview');
+    Route::get('/organizations/{organization}/projects/{project}/imports/{batch}', [RegisterImportController::class, 'show'])->name('register-imports.show');
+    Route::post('/organizations/{organization}/projects/{project}/imports/{batch}/confirm', [RegisterImportController::class, 'confirm'])->name('register-imports.confirm');
 
     Route::post('/organizations/{organization}/projects/{project}/assessment', [AssessmentController::class, 'start'])->name('assessments.start');
     Route::get('/organizations/{organization}/projects/{project}/assessment', [AssessmentController::class, 'show'])->name('assessments.show');

@@ -63,6 +63,24 @@ npm run build
 
 The CI workflow runs the same backend and frontend gates, verifies reversible migrations and the starter catalog, and explicitly installs PHP's ZIP extension.
 
+## Register CSV imports
+
+Business processes, assets, and dependencies can be imported through separate CSV files with these exact headers. Header matching is case-insensitive, column order is arbitrary, and unknown or duplicate headers are rejected.
+
+```text
+key,name,description,owner_name,owner_email,active
+key,name,type,description,owner_name,owner_email,active
+source_type,source_key,target_type,target_key,importance,reason,active
+```
+
+Files must be UTF-8 and may include a UTF-8 BOM. Comma and semicolon delimiters are accepted when the header identifies exactly one format. Each upload is limited to 5 MiB and 10,000 data rows. NUL bytes, malformed quoting, and cells whose trimmed value begins with `=`, `+`, `-`, or `@` are rejected to prevent spreadsheet-formula injection.
+
+An import first validates the complete file and presents a preview; it does not change a register. A valid preview can then be confirmed once within 30 minutes. Confirmation revalidates the reviewed data and applies the whole batch atomically, so a conflict or invalid row leaves the register unchanged. Existing records omitted from a CSV remain unchanged and are never implicitly deactivated or deleted.
+
+The application retains only the normalized preview payload needed for confirmation, never the original CSV bytes. Expired and completed batches are removed by the scheduled daily `register-imports:purge` command. Ensure the Laravel scheduler runs in production so this cleanup continues automatically.
+
+CSV parsing, validation, and register updates are implemented behind transport-independent services. These services can support a future authenticated API, but this version does not expose an external register API.
+
 ## Evidence storage and upload security
 
 Uploaded evidence is stored on Laravel's private `evidence` disk below `storage/app/private/evidence`. It has no public URL and is only delivered through an authorized, integrity-checked download endpoint. Original filenames are never used as storage paths. The domain services use Laravel's filesystem abstraction, so the disk can later be switched to S3 or Azure-compatible object storage without changing the evidence workflow.

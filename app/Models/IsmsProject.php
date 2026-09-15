@@ -95,4 +95,36 @@ class IsmsProject extends Model
     {
         return $this->hasMany(Measure::class, 'project_id');
     }
+
+    /**
+     * @return HasMany<BusinessProcess, $this>
+     */
+    public function businessProcesses(): HasMany
+    {
+        return $this->hasMany(BusinessProcess::class, 'project_id');
+    }
+
+    /**
+     * @return HasMany<Asset, $this>
+     */
+    public function assets(): HasMany
+    {
+        return $this->hasMany(Asset::class, 'project_id');
+    }
+
+    /**
+     * @return HasMany<DependencyEdge, $this>
+     */
+    public function dependencyEdges(): HasMany
+    {
+        return $this->hasMany(DependencyEdge::class, 'project_id');
+    }
+
+    /**
+     * @return HasMany<RegisterImportBatch, $this>
+     */
+    public function registerImportBatches(): HasMany
+    {
+        return $this->hasMany(RegisterImportBatch::class, 'project_id');
+    }
 }

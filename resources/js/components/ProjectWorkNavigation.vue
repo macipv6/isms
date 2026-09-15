@@ -14,6 +14,13 @@ const tabs: Array<{ key: ProjectWorkTab; label: string; href: string }> = [
     { key: 'evidence', label: 'Nachweise', href: `${base}/evidence` },
     { key: 'findings', label: 'Feststellungen', href: `${base}/findings` },
     { key: 'measures', label: 'Maßnahmen', href: `${base}/measures` },
+    { key: 'processes', label: 'Prozesse', href: `${base}/processes` },
+    { key: 'assets', label: 'Assets', href: `${base}/assets` },
+    {
+        key: 'dependencies',
+        label: 'Abhängigkeiten',
+        href: `${base}/dependencies`,
+    },
 ];
 </script>
 

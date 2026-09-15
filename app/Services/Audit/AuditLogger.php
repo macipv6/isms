@@ -18,14 +18,30 @@ class AuditLogger
         'evidence_id',
         'finding_id',
         'measure_id',
+        'business_process_id',
+        'asset_id',
+        'dependency_edge_id',
+        'key',
+        'source_type',
+        'source_id',
+        'source_key',
+        'target_type',
+        'target_id',
+        'target_key',
+        'importance',
+        'old_active',
+        'new_active',
         'old_status',
         'new_status',
         'link_type',
         'failure_kind',
+        'import_batch_id',
+        'import_kind',
+        'row_counts',
     ];
 
     /**
-     * @param  array<string, string|list<string>|null>  $context
+     * @param  array<string, string|list<string>|array<string, int>|null>  $context
      */
     public function record(
         string $eventType,
