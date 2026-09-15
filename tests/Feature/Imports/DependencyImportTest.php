@@ -125,6 +125,57 @@ class DependencyImportTest extends TestCase
         $this->assertDatabaseHas('dependency_edges', ['source_process_id' => $process->id, 'target_asset_id' => $first->id, 'is_active' => true]);
     }
 
+    public function test_existing_edge_can_be_deactivated_and_its_metadata_updated_after_an_endpoint_becomes_inactive(): void
+    {
+        [$project, $actor] = $this->context();
+        $source = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P1']);
+        $target = Asset::factory()->for($project, 'project')->create(['key' => 'A1']);
+        $edge = $this->edge($project, $actor, $source, $target, true, DependencyImportance::Supporting, 'before');
+        $target->update(['is_active' => false]);
+
+        $batch = $this->preview($project, $actor, [
+            'process,P1,asset,A1,critical,after,false',
+        ]);
+
+        $this->assertSame(RegisterImportStatus::Pending, $batch->status);
+        $this->assertEquals(['new' => 0, 'changed' => 1, 'unchanged' => 0, 'invalid' => 0], $batch->summary['counts']);
+
+        app(RegisterImportConfirmer::class)->confirm($batch, $actor);
+
+        $this->assertDatabaseHas('dependency_edges', [
+            'id' => $edge->id,
+            'importance' => DependencyImportance::Critical->value,
+            'reason' => 'after',
+            'is_active' => false,
+        ]);
+        $this->assertDatabaseCount('dependency_edges', 1);
+    }
+
+    public function test_existing_active_edge_allows_metadata_only_import_after_an_endpoint_becomes_inactive(): void
+    {
+        [$project, $actor] = $this->context();
+        $source = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P1']);
+        $target = Asset::factory()->for($project, 'project')->create(['key' => 'A1']);
+        $edge = $this->edge($project, $actor, $source, $target, true, DependencyImportance::Supporting, 'before');
+        $source->update(['is_active' => false]);
+
+        $batch = $this->preview($project, $actor, [
+            'process,P1,asset,A1,critical,after,true',
+        ]);
+
+        $this->assertSame(RegisterImportStatus::Pending, $batch->status);
+
+        app(RegisterImportConfirmer::class)->confirm($batch, $actor);
+
+        $this->assertDatabaseHas('dependency_edges', [
+            'id' => $edge->id,
+            'importance' => DependencyImportance::Critical->value,
+            'reason' => 'after',
+            'is_active' => true,
+        ]);
+        $this->assertDatabaseCount('dependency_edges', 1);
+    }
+
     /** @return array{IsmsProject, User} */
     private function context(): array
     {

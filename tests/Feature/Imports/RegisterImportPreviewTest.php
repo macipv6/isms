@@ -277,6 +277,38 @@ class RegisterImportPreviewTest extends TestCase
         $this->assertSame('cycle', $batch->summary['rows'][0]['code']);
     }
 
+    public function test_dependency_preview_rejects_an_unrelated_legacy_cycle_in_the_complete_final_graph(): void
+    {
+        [, $project, $actor] = $this->context();
+        $first = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P1']);
+        $second = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P2']);
+        $third = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P3']);
+        $fourth = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P4']);
+        DependencyEdge::factory()->for($project, 'project')->create([
+            'source_process_id' => $first->id, 'source_asset_id' => null,
+            'target_process_id' => $second->id, 'target_asset_id' => null,
+            'is_active' => true,
+        ]);
+        DependencyEdge::factory()->for($project, 'project')->create([
+            'source_process_id' => $second->id, 'source_asset_id' => null,
+            'target_process_id' => $first->id, 'target_asset_id' => null,
+            'is_active' => true,
+        ]);
+        $contents = implode("\n", [
+            'source_type,source_key,target_type,target_key,importance,reason,active',
+            'process,P3,process,P4,critical,,true',
+        ])."\n";
+
+        $batch = app(RegisterImportPreviewer::class)->preview($project, RegisterImportKind::Dependencies, $this->upload('dependencies.csv', $contents), $actor);
+
+        $this->assertSame(RegisterImportStatus::Rejected, $batch->status);
+        $this->assertEquals(['new' => 1, 'changed' => 0, 'unchanged' => 0, 'invalid' => 1], $batch->summary['counts']);
+        $this->assertSame('cycle', $batch->summary['rows'][0]['code']);
+        $this->assertArrayNotHasKey('values', $batch->summary['rows'][0]);
+        $this->assertCount(2, $batch->summary['rows']);
+        $this->assertDatabaseCount('dependency_edges', 2);
+    }
+
     /** @return array{Organization, IsmsProject, User} */
     private function context(): array
     {
