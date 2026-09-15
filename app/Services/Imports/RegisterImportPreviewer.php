@@ -179,8 +179,8 @@ class RegisterImportPreviewer
         $candidates = [];
         foreach ($parsed->rows as $row) {
             $payload[] = $row->values;
-            [$source, $sourceCode] = $this->resolveNode($row->values['source_type'], $row->values['source_key'], $processes, $assets);
-            [$target, $targetCode] = $this->resolveNode($row->values['target_type'], $row->values['target_key'], $processes, $assets);
+            [$source, $sourceCode, $sourceActive] = $this->resolveNode($row->values['source_type'], $row->values['source_key'], $processes, $assets);
+            [$target, $targetCode, $targetActive] = $this->resolveNode($row->values['target_type'], $row->values['target_key'], $processes, $assets);
             $code = $sourceCode ?? $targetCode;
             if ($code !== null) {
                 $rows[] = ['line' => $row->line, 'category' => 'invalid', 'code' => $code, 'values' => $row->values];
@@ -190,6 +190,11 @@ class RegisterImportPreviewer
 
             $pairKey = $source.'>'.$target;
             $existing = $existingByPair[$pairKey] ?? null;
+            if ($this->requiresActiveEndpoints($existing, $row->values['active']) && (! $sourceActive || ! $targetActive)) {
+                $rows[] = ['line' => $row->line, 'category' => 'invalid', 'code' => 'inactive_endpoint', 'values' => $row->values];
+
+                continue;
+            }
             $category = $existing === null ? 'new' : ($this->dependencyChanged($existing, $row->values) ? 'changed' : 'unchanged');
             $rows[] = ['line' => $row->line, 'category' => $category, 'code' => null, 'values' => $row->values, 'pair' => $pairKey];
             $candidates[$pairKey] = ['source' => $source, 'target' => $target, 'active' => $row->values['active']];
@@ -203,13 +208,18 @@ class RegisterImportPreviewer
             }
         }
         $cycleEdges = $this->cycleDetector->cycleEdgeKeys(array_values($activeEdges));
+        $candidateCycleFound = false;
         foreach ($rows as &$row) {
             if (isset($row['pair'], $candidates[$row['pair']], $cycleEdges[$row['pair']]) && $candidates[$row['pair']]['active']) {
                 $row['category'] = 'invalid';
                 $row['code'] = 'cycle';
+                $candidateCycleFound = true;
             }
         }
         unset($row);
+        if ($cycleEdges !== [] && ! $candidateCycleFound) {
+            $rows[] = ['line' => null, 'field' => 'dependencies', 'category' => 'invalid', 'code' => 'cycle'];
+        }
         foreach ($rows as &$row) {
             unset($row['pair']);
         }
@@ -245,19 +255,21 @@ class RegisterImportPreviewer
     /**
      * @param  Collection<string, BusinessProcess>  $processes
      * @param  Collection<string, Asset>  $assets
-     * @return array{string|null, string|null}
+     * @return array{string|null, string|null, bool}
      */
     private function resolveNode(string $type, string $key, $processes, $assets): array
     {
         $record = $type === 'process' ? $processes->get($key) : $assets->get($key);
         if ($record === null) {
-            return [null, 'unknown_endpoint'];
-        }
-        if (! $record->is_active) {
-            return [null, 'inactive_endpoint'];
+            return [null, 'unknown_endpoint', false];
         }
 
-        return [$type.':'.$record->id, null];
+        return [$type.':'.$record->id, null, (bool) $record->is_active];
+    }
+
+    private function requiresActiveEndpoints(?DependencyEdge $existing, bool $requestedActive): bool
+    {
+        return $requestedActive && (! $existing instanceof DependencyEdge || ! $existing->is_active);
     }
 
     /** @return array{source: string, target: string} */

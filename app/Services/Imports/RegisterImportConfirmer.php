@@ -203,11 +203,17 @@ class RegisterImportConfirmer
             $source = $this->resolvedDependencyNode($row['source_type'], $row['source_key'], $processes, $assets);
             $target = $this->resolvedDependencyNode($row['target_type'], $row['target_key'], $processes, $assets);
             $pairKey = $source->identity().'>'.$target->identity();
+            $existing = $existingByPair[$pairKey] ?? null;
+            if ($this->requiresActiveEndpoints($existing, $row['active'])
+                && (! $this->resolvedNodeIsActive($row['source_type'], $row['source_key'], $processes, $assets)
+                    || ! $this->resolvedNodeIsActive($row['target_type'], $row['target_key'], $processes, $assets))) {
+                $this->reject();
+            }
             $resolvedRows[] = [
                 'values' => $row,
                 'source' => $source,
                 'target' => $target,
-                'existing' => $existingByPair[$pairKey] ?? null,
+                'existing' => $existing,
             ];
         }
 
@@ -276,11 +282,24 @@ class RegisterImportConfirmer
         if (! $record instanceof BusinessProcess && ! $record instanceof Asset) {
             $this->reject();
         }
-        if (! $record->is_active) {
-            $this->reject();
-        }
 
         return $record instanceof BusinessProcess ? DependencyNode::process($record) : DependencyNode::asset($record);
+    }
+
+    /**
+     * @param  Collection<string, BusinessProcess>  $processes
+     * @param  Collection<string, Asset>  $assets
+     */
+    private function resolvedNodeIsActive(string $type, string $key, Collection $processes, Collection $assets): bool
+    {
+        $record = $type === 'process' ? $processes->get($key) : $assets->get($key);
+
+        return ($record instanceof BusinessProcess || $record instanceof Asset) && $record->is_active;
+    }
+
+    private function requiresActiveEndpoints(?DependencyEdge $existing, bool $requestedActive): bool
+    {
+        return $requestedActive && (! $existing instanceof DependencyEdge || ! $existing->is_active);
     }
 
     /**
