@@ -93,6 +93,32 @@ class DependencyPageTest extends TestCase
                 ->where('capabilities.traverse', true));
     }
 
+    public function test_dependency_key_filter_treats_underscore_as_a_literal_character(): void
+    {
+        [$customer, $project, $actor] = $this->context();
+        $literalSource = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'A_1']);
+        $wildcardSource = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'AB1']);
+        $literalTarget = Asset::factory()->for($project, 'project')->create(['key' => 'TARGET-1']);
+        $wildcardTarget = Asset::factory()->for($project, 'project')->create(['key' => 'TARGET-2']);
+
+        foreach ([[$literalSource, $literalTarget], [$wildcardSource, $wildcardTarget]] as [$source, $target]) {
+            DependencyEdge::query()->create([
+                'project_id' => $project->id,
+                'source_process_id' => $source->id,
+                'target_asset_id' => $target->id,
+                'importance' => 'supporting',
+                'is_active' => true,
+                'created_by' => $actor->id,
+            ]);
+        }
+
+        $this->actingAs($actor)->get($this->url($customer, $project).'?key=A_')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page): Assert => $page
+                ->has('dependencies.data', 1)
+                ->where('dependencies.data.0.source.key', 'A_1'));
+    }
+
     /** @return array{Organization, IsmsProject, User} */
     private function context(ProjectStatus $status = ProjectStatus::Draft): array
     {
