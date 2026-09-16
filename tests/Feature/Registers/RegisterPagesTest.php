@@ -123,6 +123,45 @@ class RegisterPagesTest extends TestCase
         }
     }
 
+    public function test_register_key_filter_supports_one_character_and_treats_underscore_literally(): void
+    {
+        [$customer, $project, $actor] = $this->context();
+        BusinessProcess::factory()->for($project, 'project')->create(['key' => 'A_1']);
+        BusinessProcess::factory()->for($project, 'project')->create(['key' => 'AB1']);
+        BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P0']);
+        Asset::factory()->for($project, 'project')->create(['key' => 'A_2']);
+        Asset::factory()->for($project, 'project')->create(['key' => 'AB2']);
+        Asset::factory()->for($project, 'project')->create(['key' => 'A0']);
+
+        $this->actingAs($actor)->get($this->url($customer, $project, 'processes').'?key=A')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page): Assert => $page->has('processes.data', 2));
+
+        $this->actingAs($actor)->get($this->url($customer, $project, 'processes').'?key=A_')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page): Assert => $page
+                ->has('processes.data', 1)
+                ->where('processes.data.0.key', 'A_1'));
+
+        $this->actingAs($actor)->get($this->url($customer, $project, 'assets').'?key=A_')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page): Assert => $page
+                ->has('assets.data', 1)
+                ->where('assets.data.0.key', 'A_2'));
+
+        $this->actingAs($actor)->get($this->url($customer, $project, 'processes').'?key=0')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page): Assert => $page
+                ->has('processes.data', 1)
+                ->where('processes.data.0.key', 'P0'));
+
+        $this->actingAs($actor)->get($this->url($customer, $project, 'assets').'?key=0')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page): Assert => $page
+                ->has('assets.data', 1)
+                ->where('assets.data.0.key', 'A0'));
+    }
+
     /** @return array{Organization, IsmsProject, User} */
     private function context(ProjectStatus $status = ProjectStatus::Draft): array
     {

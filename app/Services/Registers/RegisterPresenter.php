@@ -182,7 +182,9 @@ class RegisterPresenter
      */
     private function applyBaseFilters(Builder $query, array $validated): void
     {
-        $query->when($validated['key'] ?? null, fn (Builder $builder, string $key) => $builder->where('key', 'ilike', '%'.RegisterKey::normalize($key).'%'));
+        if (isset($validated['key'])) {
+            $query->where('key', 'ilike', $this->keySearchPattern($validated['key']));
+        }
         if (isset($validated['state'])) {
             $query->where('is_active', $validated['state'] === 'active');
         }
@@ -205,14 +207,22 @@ class RegisterPresenter
             }
         }
         if (isset($validated['key'])) {
-            $key = RegisterKey::normalize($validated['key']);
-            $query->where(function (Builder $builder) use ($key): void {
-                $builder->whereHas('sourceProcess', fn (Builder $relation) => $relation->where('key', 'ilike', '%'.$key.'%'))
-                    ->orWhereHas('sourceAsset', fn (Builder $relation) => $relation->where('key', 'ilike', '%'.$key.'%'))
-                    ->orWhereHas('targetProcess', fn (Builder $relation) => $relation->where('key', 'ilike', '%'.$key.'%'))
-                    ->orWhereHas('targetAsset', fn (Builder $relation) => $relation->where('key', 'ilike', '%'.$key.'%'));
+            $pattern = $this->keySearchPattern($validated['key']);
+            $query->where(function (Builder $builder) use ($pattern): void {
+                $builder->whereHas('sourceProcess', fn (Builder $relation) => $relation->where('key', 'ilike', $pattern))
+                    ->orWhereHas('sourceAsset', fn (Builder $relation) => $relation->where('key', 'ilike', $pattern))
+                    ->orWhereHas('targetProcess', fn (Builder $relation) => $relation->where('key', 'ilike', $pattern))
+                    ->orWhereHas('targetAsset', fn (Builder $relation) => $relation->where('key', 'ilike', $pattern));
             });
         }
+    }
+
+    private function keySearchPattern(string $key): string
+    {
+        $normalized = strtoupper(trim($key));
+        $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $normalized);
+
+        return '%'.$escaped.'%';
     }
 
     /**
