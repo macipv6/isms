@@ -10,5 +10,6 @@ class DatabaseSeeder extends Seeder
     {
         $this->call(AssessmentCatalogSeeder::class);
         $this->call(RiskMethodologySeeder::class);
+        $this->call(ThreatCatalogSeeder::class);
     }
 }
