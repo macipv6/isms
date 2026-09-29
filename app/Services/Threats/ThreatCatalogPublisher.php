@@ -21,7 +21,7 @@ class ThreatCatalogPublisher
             $actor = $this->requireAdmin($actor);
             $source = ThreatCatalogVersion::query()->lockForUpdate()->findOrFail($source->id);
             if ($source->status !== PublicationStatus::Published) {
-                throw ValidationException::withMessages(['version' => 'Only a published catalog can be cloned.']);
+                throw ValidationException::withMessages(['version' => 'Nur ein veröffentlichter Gefährdungskatalog kann geklont werden.']);
             }
             $source->catalog()->lockForUpdate()->firstOrFail();
             $next = (int) ThreatCatalogVersion::query()->where('catalog_id', $source->catalog_id)->max('version') + 1;
@@ -76,7 +76,7 @@ class ThreatCatalogPublisher
             $this->requireDraft($version);
             $entries = $version->entries()->get();
             if ($entries->isEmpty() || $entries->pluck('code')->unique()->count() !== $entries->count() || $entries->pluck('sort_order')->unique()->count() !== $entries->count()) {
-                throw ValidationException::withMessages(['entries' => 'A non-empty catalog with unique codes and order is required.']);
+                throw ValidationException::withMessages(['entries' => 'Ein nicht leerer Katalog mit eindeutigen Kennungen und Reihenfolgen ist erforderlich.']);
             }
             foreach ($entries as $entry) {
                 $this->validateEntry($entry->toArray());
@@ -85,7 +85,7 @@ class ThreatCatalogPublisher
                 $codes = $entries->pluck('code')->all();
                 foreach (range(1, 47) as $number) {
                     if (! in_array('G 0.'.$number, $codes, true)) {
-                        throw ValidationException::withMessages(['entries' => 'The BSI baseline requires all 47 elemental threat codes.']);
+                        throw ValidationException::withMessages(['entries' => 'Der BSI-Basiskatalog benötigt alle 47 Kennungen der elementaren Gefährdungen.']);
                     }
                 }
             }
@@ -101,7 +101,7 @@ class ThreatCatalogPublisher
         $current = User::query()->lockForUpdate()->find($actor->id);
         $organization = $current?->organization()->lockForUpdate()->first();
         if (! $current || ! $current->is_active || $current->role !== UserRole::Admin || ! $organization || ! $organization->is_active || $organization->organization_type !== 'internal') {
-            throw ValidationException::withMessages(['actor' => 'An active internal administrator is required.']);
+            throw ValidationException::withMessages(['actor' => 'Ein aktiver interner Administrator ist erforderlich.']);
         }
 
         return $current;
@@ -110,7 +110,7 @@ class ThreatCatalogPublisher
     private function requireDraft(ThreatCatalogVersion $version): void
     {
         if ($version->status !== PublicationStatus::Draft) {
-            throw ValidationException::withMessages(['version' => 'Only a draft catalog can be changed.']);
+            throw ValidationException::withMessages(['version' => 'Nur ein Entwurf des Gefährdungskatalogs kann geändert werden.']);
         }
     }
 
@@ -118,7 +118,7 @@ class ThreatCatalogPublisher
     private function validateEntry(array $data): void
     {
         if (! is_string($data['code'] ?? null) || ! preg_match('/^[A-Z0-9][A-Z0-9._ -]{0,31}$/', $data['code']) || ! is_string($data['title'] ?? null) || trim($data['title']) === '' || mb_strlen($data['title']) > 255 || ! is_string($data['description'] ?? null) || trim($data['description']) === '' || mb_strlen($data['description']) > 4000 || ! is_numeric($data['sort_order'] ?? null) || (int) $data['sort_order'] < 1 || ! ($data['confidentiality'] ?? false) && ! ($data['integrity'] ?? false) && ! ($data['availability'] ?? false)) {
-            throw ValidationException::withMessages(['entry' => 'Code, title, bounded description, positive order and at least one CIA objective are required.']);
+            throw ValidationException::withMessages(['entry' => 'Eintrag benötigt gültige Kennung, Titel, Beschreibung (maximal 4.000 Zeichen), positive Reihenfolge und mindestens ein Schutzziel.']);
         }
     }
 }

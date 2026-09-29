@@ -142,6 +142,36 @@ class ThreatCatalogTest extends TestCase
         $this->assertSame('ORG-1', $entry->code);
     }
 
+    public function test_catalog_workflow_validation_has_stable_german_messages_and_keys(): void
+    {
+        $this->seed(ThreatCatalogSeeder::class);
+        $source = ThreatCatalogVersion::query()->sole();
+        $draft = ThreatCatalogVersion::factory()->create();
+        $admin = $this->actor(UserRole::Admin);
+        $publisher = app(ThreatCatalogPublisher::class);
+        $validEntry = ['code' => 'ORG-1', 'title' => 'Zusatz', 'description' => 'Konkrete Gefährdung', 'sort_order' => 1, 'availability' => true];
+
+        $this->assertValidation(fn () => $publisher->clonePublished($draft, $admin), 'version', 'Nur ein veröffentlichter Gefährdungskatalog kann geklont werden.');
+        $this->assertValidation(fn () => $publisher->publish($draft, $admin), 'entries', 'Ein nicht leerer Katalog mit eindeutigen Kennungen und Reihenfolgen ist erforderlich.');
+        $this->assertValidation(fn () => $publisher->upsertDraftEntry($source, $validEntry, $admin), 'version', 'Nur ein Entwurf des Gefährdungskatalogs kann geändert werden.');
+        $this->assertValidation(fn () => $publisher->upsertDraftEntry($draft, ['code' => 'ORG-1'], $admin), 'entry', 'Eintrag benötigt gültige Kennung, Titel, Beschreibung (maximal 4.000 Zeichen), positive Reihenfolge und mindestens ein Schutzziel.');
+        $this->assertValidation(fn () => $publisher->clonePublished($source, $this->actor(UserRole::Consultant)), 'actor', 'Ein aktiver interner Administrator ist erforderlich.');
+
+        $incomplete = $publisher->clonePublished($source, $admin);
+        $incomplete->entries()->where('code', 'G 0.24')->delete();
+        $this->assertValidation(fn () => $publisher->publish($incomplete, $admin), 'entries', 'Der BSI-Basiskatalog benötigt alle 47 Kennungen der elementaren Gefährdungen.');
+    }
+
+    private function assertValidation(callable $operation, string $key, string $message): void
+    {
+        try {
+            $operation();
+            $this->fail('Validation should reject this operation.');
+        } catch (ValidationException $exception) {
+            $this->assertSame([$key => [$message]], $exception->errors());
+        }
+    }
+
     private function actor(UserRole $role): User
     {
         return User::factory()->for(Organization::factory()->create(['organization_type' => 'internal']))->create(['role' => $role, 'is_active' => true]);

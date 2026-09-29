@@ -229,6 +229,38 @@ class ProjectRiskContextTest extends TestCase
         }
     }
 
+    public function test_context_workflow_validation_has_stable_german_messages_and_keys(): void
+    {
+        [$method, $catalog] = $this->seedVersions();
+        $service = app(ProjectRiskContextService::class);
+        $writer = $this->actor();
+        $project = IsmsProject::factory()->create();
+
+        $this->assertValidation(fn () => $service->initialize($project, $method, $catalog, User::factory()->for(Organization::factory()->create(['organization_type' => 'customer']))->create()), 'actor', 'Ein aktiver interner Administrator oder Berater ist erforderlich.');
+        $completed = IsmsProject::factory()->create(['status' => 'completed']);
+        $this->assertValidation(fn () => $service->initialize($completed, $method, $catalog, $writer), 'project', 'Ein bearbeitbares Kundenprojekt ist erforderlich.');
+        $this->assertValidation(fn () => $service->initialize($project, RiskMethodologyVersion::factory()->create(), $catalog, $writer), 'methodology', 'Eine veröffentlichte Risikomethodik ist erforderlich.');
+        $this->assertValidation(fn () => $service->initialize($project, $method, ThreatCatalogVersion::factory()->create(), $writer), 'catalog', 'Ein veröffentlichter Gefährdungskatalog ist erforderlich.');
+
+        $context = $service->initialize($project, $method, $catalog, $writer);
+        $publisher = app(ThreatCatalogPublisher::class);
+        $new = $publisher->clonePublished($catalog, $this->actor(UserRole::Admin));
+        $publisher->publish($new, $this->actor(UserRole::Admin));
+        $this->assertValidation(fn () => $service->initialize($project, $method, $new, $writer), 'context', 'Für dieses Projekt ist bereits ein anderer Risikokontext initialisiert. Verwenden Sie die Migration.');
+        $service->migrate($context, $method, $new, $writer);
+        $this->assertValidation(fn () => $service->migrate($context, $method, $catalog, $writer), 'versions', 'Für die Migration sind Versionen derselben Familie erforderlich, die nicht älter als die aktuellen Versionen sind.');
+    }
+
+    private function assertValidation(callable $operation, string $key, string $message): void
+    {
+        try {
+            $operation();
+            $this->fail('Validation should reject this operation.');
+        } catch (ValidationException $exception) {
+            $this->assertSame([$key => [$message]], $exception->errors());
+        }
+    }
+
     private function seedVersions(): array
     {
         $this->seed([RiskMethodologySeeder::class, ThreatCatalogSeeder::class]);

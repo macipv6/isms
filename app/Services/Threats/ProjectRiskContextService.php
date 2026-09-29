@@ -29,7 +29,7 @@ class ProjectRiskContextService
             $existing = ProjectRiskContext::query()->where('project_id', $project->id)->first();
             if ($existing) {
                 if ($existing->methodology_version_id !== $methodology->id || $existing->catalog_version_id !== $catalog->id) {
-                    throw ValidationException::withMessages(['context' => 'This project already has a different risk context; use migration.']);
+                    throw ValidationException::withMessages(['context' => 'Für dieses Projekt ist bereits ein anderer Risikokontext initialisiert. Verwenden Sie die Migration.']);
                 }
 
                 return $existing;
@@ -69,7 +69,7 @@ class ProjectRiskContextService
             $oldMethodology = RiskMethodologyVersion::query()->findOrFail($context->methodology_version_id);
             $oldCatalog = ThreatCatalogVersion::query()->findOrFail($context->catalog_version_id);
             if ($oldMethodology->methodology_id !== $methodology->methodology_id || $methodology->version < $oldMethodology->version || $oldCatalog->catalog_id !== $catalog->catalog_id || $catalog->version < $oldCatalog->version) {
-                throw ValidationException::withMessages(['versions' => 'Migration requires the same family and current or newer versions.']);
+                throw ValidationException::withMessages(['versions' => 'Für die Migration sind Versionen derselben Familie erforderlich, die nicht älter als die aktuellen Versionen sind.']);
             }
             if ($oldCatalog->id !== $catalog->id) {
                 $this->copyCatalog($context, $catalog, $actor);
@@ -94,7 +94,7 @@ class ProjectRiskContextService
         $current = User::query()->lockForUpdate()->find($actor->id);
         $organization = $current?->organization()->lockForUpdate()->first();
         if (! $current || ! $current->is_active || ! in_array($current->role, [UserRole::Admin, UserRole::Consultant], true) || ! $organization || ! $organization->is_active || $organization->organization_type !== 'internal') {
-            throw ValidationException::withMessages(['actor' => 'An active internal administrator or consultant is required.']);
+            throw ValidationException::withMessages(['actor' => 'Ein aktiver interner Administrator oder Berater ist erforderlich.']);
         }
 
         return $current;
@@ -104,7 +104,7 @@ class ProjectRiskContextService
     {
         $organization = $project->organization()->lockForUpdate()->firstOrFail();
         if (! $organization->is_active || $organization->organization_type !== 'customer' || ! in_array($project->status, [ProjectStatus::Draft, ProjectStatus::Active], true)) {
-            throw ValidationException::withMessages(['project' => 'A writable customer project is required.']);
+            throw ValidationException::withMessages(['project' => 'Ein bearbeitbares Kundenprojekt ist erforderlich.']);
         }
     }
 
@@ -112,7 +112,7 @@ class ProjectRiskContextService
     {
         $current = RiskMethodologyVersion::query()->findOrFail($version->id);
         if ($current->status !== PublicationStatus::Published) {
-            throw ValidationException::withMessages(['methodology' => 'A published methodology is required.']);
+            throw ValidationException::withMessages(['methodology' => 'Eine veröffentlichte Risikomethodik ist erforderlich.']);
         }
 
         return $current;
@@ -122,7 +122,7 @@ class ProjectRiskContextService
     {
         $current = ThreatCatalogVersion::query()->findOrFail($version->id);
         if ($current->status !== PublicationStatus::Published) {
-            throw ValidationException::withMessages(['catalog' => 'A published threat catalog is required.']);
+            throw ValidationException::withMessages(['catalog' => 'Ein veröffentlichter Gefährdungskatalog ist erforderlich.']);
         }
 
         return $current;
