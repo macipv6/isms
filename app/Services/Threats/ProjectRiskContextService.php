@@ -43,7 +43,7 @@ class ProjectRiskContextService
                 'initialized_at' => now(),
             ]);
             $this->copyCatalog($context, $catalog, $actor);
-            $this->propagator->recalculate($project);
+            $this->propagator->recalculate($project, [], $actor);
             $this->recordChange($context, 'initialized', null, $methodology, null, $catalog, $actor);
             $this->audit->record('risk_context.initialized', $actor, [
                 'project_id' => $project->id,
@@ -77,7 +77,7 @@ class ProjectRiskContextService
                 $this->copyCatalog($context, $catalog, $actor);
             }
             $context->update(['methodology_version_id' => $methodology->id, 'catalog_version_id' => $catalog->id]);
-            $this->propagator->recalculate($project);
+            $this->propagator->recalculate($project, [], $actor);
             $this->recordChange($context, 'migrated', $oldMethodology, $methodology, $oldCatalog, $catalog, $actor);
             $this->audit->record('risk_context.migrated', $actor, [
                 'project_id' => $project->id,

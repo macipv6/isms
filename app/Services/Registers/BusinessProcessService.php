@@ -74,7 +74,22 @@ class BusinessProcessService
 
     public function changeStatus(BusinessProcess $process, bool $active, User $actor, bool $audit = true): BusinessProcess
     {
-        return DB::transaction(function () use ($process, $active, $actor, $audit): BusinessProcess {
+        return $this->changeStatusInternal($process, $active, $actor, $audit, false);
+    }
+
+    /** @internal The import caller performs one protection recalculation before its transaction commits. */
+    public function changeStatusForImport(BusinessProcess $process, bool $active, User $actor): BusinessProcess
+    {
+        if (DB::transactionLevel() === 0) {
+            $this->reject('import', 'Statusänderungen im Import benötigen eine laufende Transaktion.');
+        }
+
+        return $this->changeStatusInternal($process, $active, $actor, false, true);
+    }
+
+    private function changeStatusInternal(BusinessProcess $process, bool $active, User $actor, bool $audit, bool $deferRecalculation): BusinessProcess
+    {
+        return DB::transaction(function () use ($process, $active, $actor, $audit, $deferRecalculation): BusinessProcess {
             $project = $this->lockedWritableProject($process->project, $actor);
             $locked = $this->locked($project, $process);
             if ($locked->is_active === $active) {
@@ -83,9 +98,11 @@ class BusinessProcessService
             $old = $locked->is_active;
             $locked->update(['is_active' => $active]);
             foreach (ProtectionNeed::query()->where('business_process_id', $locked->id)->get() as $need) {
-                $this->invalidator->invalidate($need);
+                $this->invalidator->invalidate($need, $actor);
             }
-            $this->propagator->recalculate($project);
+            if (! $deferRecalculation) {
+                $this->propagator->recalculate($project, [], $actor);
+            }
             if ($audit) {
                 $this->audit->record('business_process.status_changed', $actor, ['project_id' => $project->id, 'business_process_id' => $locked->id, 'key' => $locked->key, 'old_active' => $old ? 'true' : 'false', 'new_active' => $active ? 'true' : 'false'], $project->organization_id);
             }

@@ -55,8 +55,8 @@ class DependencyService
                 $existing->fill(['importance' => $data['importance'], 'reason' => $data['reason'], 'is_active' => true]);
                 $changed = array_values(array_intersect(['importance', 'reason'], array_keys($existing->getDirty())));
                 $existing->save();
-                $this->invalidator->invalidateTarget($target);
-                $this->propagator->recalculate($lockedProject, [$target]);
+                $this->invalidator->invalidateTarget($target, $actor);
+                $this->propagator->recalculate($lockedProject, [$target], $actor);
                 if ($audit) {
                     $this->audit->record('dependency.status_changed', $actor, [...$this->auditContext($lockedProject, $existing, $source, $target), 'old_active' => $oldActive ? 'true' : 'false', 'new_active' => 'true', 'changed_fields' => $changed], $lockedProject->organization_id);
                 }
@@ -64,8 +64,8 @@ class DependencyService
                 return $existing;
             }
             $edge = DependencyEdge::query()->create([...$pair, 'project_id' => $lockedProject->id, 'importance' => $data['importance'], 'reason' => $data['reason'], 'is_active' => true, 'created_by' => $actor->id]);
-            $this->invalidator->invalidateTarget($target);
-            $this->propagator->recalculate($lockedProject, [$target]);
+            $this->invalidator->invalidateTarget($target, $actor);
+            $this->propagator->recalculate($lockedProject, [$target], $actor);
             if ($audit) {
                 $this->audit->record('dependency.created', $actor, $this->auditContext($lockedProject, $edge, $source, $target), $lockedProject->organization_id);
             }
@@ -120,8 +120,8 @@ class DependencyService
             }
             $old = $locked->is_active;
             $locked->update(['is_active' => $active]);
-            $this->invalidator->invalidateTarget($target);
-            $this->propagator->recalculate($project, [$target]);
+            $this->invalidator->invalidateTarget($target, $actor);
+            $this->propagator->recalculate($project, [$target], $actor);
             if ($audit) {
                 $this->audit->record('dependency.status_changed', $actor, [...$this->auditContext($project, $locked, $source, $target), 'old_active' => $old ? 'true' : 'false', 'new_active' => $active ? 'true' : 'false'], $project->organization_id);
             }

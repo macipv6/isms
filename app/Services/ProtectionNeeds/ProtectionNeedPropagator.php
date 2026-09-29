@@ -9,20 +9,22 @@ use App\Models\BusinessProcess;
 use App\Models\DependencyEdge;
 use App\Models\IsmsProject;
 use App\Models\ProtectionNeed;
+use App\Models\User;
+use App\Services\Audit\AuditLogger;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class ProtectionNeedPropagator
 {
-    public function __construct(private readonly ProtectionNeedInitializer $initializer, private readonly ProtectionNeedInvalidator $invalidator, private readonly ProtectionNeedAccess $access) {}
+    public function __construct(private readonly ProtectionNeedInitializer $initializer, private readonly ProtectionNeedInvalidator $invalidator, private readonly ProtectionNeedAccess $access, private readonly AuditLogger $audit) {}
 
     /** @param list<DependencyNode> $roots
      * @return Collection<int, ProtectionNeed>
      */
-    public function recalculate(IsmsProject $project, array $roots = []): Collection
+    public function recalculate(IsmsProject $project, array $roots = [], ?User $actor = null): Collection
     {
-        return DB::transaction(function () use ($project, $roots): Collection {
+        return DB::transaction(function () use ($project, $roots, $actor): Collection {
             $locked = $this->access->project($project);
             $nodes = [];
             foreach (BusinessProcess::query()->where('project_id', $locked->id)->where('is_active', true)->get() as $process) {
@@ -124,8 +126,10 @@ class ProtectionNeedPropagator
                     $newSources = array_values(array_map(fn (array $s): array => ['origin' => $s['origin'], 'level' => $s['level']->value, 'edge' => $s['edge']], $sources));
                     $sourceChanged = $oldSources !== $newSources;
                     $inheritedChanged = $need->inherited_level !== $max;
+                    $oldEffective = $need->effective_level;
+                    $invalidated = false;
                     if (isset($affected[$id]) && ($inheritedChanged || $sourceChanged)) {
-                        $this->invalidator->invalidate($need);
+                        $invalidated = $this->invalidator->invalidate($need, $actor);
                         $need->refresh();
                         $need->sources()->delete();
                         foreach ($sources as $source) {
@@ -143,25 +147,41 @@ class ProtectionNeedPropagator
                     if ($max && (! $effective || ($max->rank() > $effective->rank() && ! $approved))) {
                         $effective = $max;
                     }
-                    if (isset($affected[$id]) && ($inheritedChanged || $need->effective_level !== $effective)) {
+                    $effectiveChanged = $oldEffective !== $effective;
+                    if (isset($affected[$id]) && ($sourceChanged || $inheritedChanged || $effectiveChanged)) {
                         $need->inherited_level = $max;
                         $need->effective_level = $effective;
+                        if (! $invalidated) {
+                            $need->lock_version++;
+                        }
                         $need->save();
+                        $this->audit->record('protection_need.recalculated', $actor, [
+                            'project_id' => $locked->id,
+                            'protection_need_id' => $need->id,
+                            'objective' => $key,
+                            'old_level' => $oldEffective?->value,
+                            'new_level' => $effective?->value,
+                            'changed_fields' => array_values(array_filter([
+                                $sourceChanged ? 'sources' : null,
+                                $inheritedChanged ? 'inherited_level' : null,
+                                $effectiveChanged ? 'effective_level' : null,
+                            ])),
+                        ], $locked->organization_id);
                         $changed->push($need);
                     }
                     if ($effective) {
                         $origins = [];
                         if ($need->direct_level === $effective) {
-                            $origins[$id] = ['origin' => $id, 'level' => $effective];
+                            $origins[$id] = ['origin' => $id, 'level' => $effective, 'edge' => null];
                         }
                         if ($max === $effective) {
                             foreach ($sources as $source) {
-                                $origins[$source['origin']] = ['origin' => $source['origin'], 'level' => $source['level']];
+                                $origins[$source['origin']] = ['origin' => $source['origin'], 'level' => $source['level'], 'edge' => $source['edge']];
                             }
                         }
                         foreach ($out[$id] ?? [] as [$target, $edgeId]) {
                             foreach ($origins as $origin) {
-                                $incoming[$target][$key][] = [...$origin, 'edge' => $edgeId];
+                                $incoming[$target][$key][] = [...$origin, 'edge' => $origin['edge'] ?? $edgeId];
                             }
                         }
                     }

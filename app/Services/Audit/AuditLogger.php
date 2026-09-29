@@ -48,6 +48,7 @@ class AuditLogger
         'downgrade_request_id',
         'objective',
         'new_level',
+        'old_level',
         'decision_channel',
     ];
 

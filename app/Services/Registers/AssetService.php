@@ -76,7 +76,22 @@ class AssetService
 
     public function changeStatus(Asset $asset, bool $active, User $actor, bool $audit = true): Asset
     {
-        return DB::transaction(function () use ($asset, $active, $actor, $audit): Asset {
+        return $this->changeStatusInternal($asset, $active, $actor, $audit, false);
+    }
+
+    /** @internal The import caller performs one protection recalculation before its transaction commits. */
+    public function changeStatusForImport(Asset $asset, bool $active, User $actor): Asset
+    {
+        if (DB::transactionLevel() === 0) {
+            $this->reject('import', 'Statusänderungen im Import benötigen eine laufende Transaktion.');
+        }
+
+        return $this->changeStatusInternal($asset, $active, $actor, false, true);
+    }
+
+    private function changeStatusInternal(Asset $asset, bool $active, User $actor, bool $audit, bool $deferRecalculation): Asset
+    {
+        return DB::transaction(function () use ($asset, $active, $actor, $audit, $deferRecalculation): Asset {
             $project = $this->project($asset->project, $actor);
             $locked = $this->locked($project, $asset);
             if ($locked->is_active === $active) {
@@ -85,9 +100,11 @@ class AssetService
             $old = $locked->is_active;
             $locked->update(['is_active' => $active]);
             foreach (ProtectionNeed::query()->where('asset_id', $locked->id)->get() as $need) {
-                $this->invalidator->invalidate($need);
+                $this->invalidator->invalidate($need, $actor);
             }
-            $this->propagator->recalculate($project);
+            if (! $deferRecalculation) {
+                $this->propagator->recalculate($project, [], $actor);
+            }
             if ($audit) {
                 $this->audit->record('asset.status_changed', $actor, ['project_id' => $project->id, 'asset_id' => $locked->id, 'key' => $locked->key, 'old_active' => $old ? 'true' : 'false', 'new_active' => $active ? 'true' : 'false'], $project->organization_id);
             }

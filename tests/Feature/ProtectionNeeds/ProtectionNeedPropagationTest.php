@@ -77,14 +77,29 @@ class ProtectionNeedPropagationTest extends TestCase
         $left = Asset::factory()->for($project, 'project')->create();
         $right = Asset::factory()->for($project, 'project')->create();
         $end = Asset::factory()->for($project, 'project')->create();
-        $this->edge($project, $actor, $process, $left);
-        $this->edge($project, $actor, $process, $right);
+        $firstLeft = $this->edge($project, $actor, $process, $left);
+        $firstRight = $this->edge($project, $actor, $process, $right);
         $leftEdge = $this->edge($project, $actor, $left, $end);
         $rightEdge = $this->edge($project, $actor, $right, $end);
         app(ProtectionNeedService::class)->rateTarget($project, DependencyNode::process($process), ['confidentiality' => ['level' => 'high', 'rationale' => 'Kritisch']], $actor, ['confidentiality' => 0, 'integrity' => 0, 'availability' => 0]);
         $need = ProtectionNeed::query()->where('asset_id', $end->id)->where('objective', 'confidentiality')->firstOrFail();
         $this->assertSame(1, $need->sources()->count());
-        $this->assertSame(min($leftEdge->id, $rightEdge->id), $need->sources()->firstOrFail()->first_edge_id);
+        $this->assertSame(min($firstLeft->id, $firstRight->id), $need->sources()->firstOrFail()->first_edge_id);
+    }
+
+    public function test_transitive_source_keeps_first_edge_from_origin(): void
+    {
+        $project = IsmsProject::factory()->for(Organization::factory()->state(['organization_type' => 'customer', 'entra_tenant_id' => null]))->create();
+        $actor = User::factory()->for(Organization::factory()->state(['organization_type' => 'internal']))->create();
+        $process = BusinessProcess::factory()->for($project, 'project')->create();
+        $middle = Asset::factory()->for($project, 'project')->create();
+        $end = Asset::factory()->for($project, 'project')->create();
+        $first = $this->edge($project, $actor, $process, $middle);
+        $this->edge($project, $actor, $middle, $end);
+        app(ProtectionNeedService::class)->rateTarget($project, DependencyNode::process($process), ['confidentiality' => ['level' => 'high', 'rationale' => 'Kritisch']], $actor, ['confidentiality' => 0, 'integrity' => 0, 'availability' => 0]);
+        $need = ProtectionNeed::query()->where('asset_id', $end->id)->where('objective', 'confidentiality')->firstOrFail();
+
+        $this->assertSame($first->id, $need->sources()->firstOrFail()->first_edge_id);
     }
 
     private function edge(IsmsProject $project, User $actor, BusinessProcess|Asset $source, Asset $target): DependencyEdge

@@ -50,17 +50,17 @@ class ProtectionNeedService
                 if ($need->direct_level === $level && $need->direct_rationale === trim($rating['rationale'])) {
                     continue;
                 }
-                $this->invalidator->invalidate($need);
+                $invalidated = $this->invalidator->invalidate($need, $actor);
                 $changedIds[$need->id] = true;
                 $need->refresh();
-                $need->fill(['direct_level' => $level, 'direct_rationale' => trim($rating['rationale']), 'rated_by' => $actor->id, 'rated_at' => now(), 'status' => ProtectionNeedStatus::Draft]);
+                $need->fill(['direct_level' => $level, 'direct_rationale' => trim($rating['rationale']), 'rated_by' => $actor->id, 'rated_at' => now(), 'status' => ProtectionNeedStatus::Draft, 'lock_version' => $need->lock_version + ($invalidated ? 0 : 1)]);
                 $need->save();
                 $this->audit->record('protection_need.rated', $actor, ['project_id' => $project->id, 'protection_need_id' => $need->id, 'objective' => $objective, 'new_level' => $level->value], $project->organization_id);
             }
             if ($wasApproved && $changedIds !== []) {
                 foreach ($rows as $need) {
                     if (! isset($changedIds[$need->id])) {
-                        $this->invalidator->invalidate($need);
+                        $this->invalidator->invalidate($need, $actor);
                     }
                 }
             }
@@ -72,7 +72,7 @@ class ProtectionNeedService
                     $need->save();
                 }
             }
-            $this->propagator->recalculate($project, [$target]);
+            $this->propagator->recalculate($project, [$target], $actor);
 
             return $this->initializer->ensureTarget($target);
         });

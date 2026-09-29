@@ -49,7 +49,7 @@ class RegisterImportConfirmer
                 if (! $lockedBatch instanceof RegisterImportBatch) {
                     $this->reject();
                 }
-                $this->assertConfirmable($lockedBatch, $actor);
+                $actor = $this->assertConfirmable($lockedBatch, $actor);
                 $project = $this->lockedWritableProject($lockedBatch);
                 $rows = $this->canonicalRows($lockedBatch);
                 if ($lockedBatch->kind === RegisterImportKind::Dependencies) {
@@ -92,17 +92,21 @@ class RegisterImportConfirmer
         }
     }
 
-    private function assertConfirmable(RegisterImportBatch $batch, User $actor): void
+    private function assertConfirmable(RegisterImportBatch $batch, User $actor): User
     {
-        $actor->loadMissing('organization');
-        if ($batch->created_by !== $actor->id
-            || ! $actor->is_active
-            || $actor->organization?->organization_type !== 'internal'
-            || ! in_array($actor->role, [UserRole::Admin, UserRole::Consultant], true)
+        $current = User::query()->whereKey($actor->id)->lockForUpdate()->first();
+        $organization = $current?->organization()->lockForUpdate()->first();
+        if ($batch->created_by !== $current?->id
+            || ! $current->is_active
+            || ! $organization?->is_active
+            || $organization->organization_type !== 'internal'
+            || ! in_array($current->role, [UserRole::Admin, UserRole::Consultant], true)
             || $batch->status !== RegisterImportStatus::Pending
             || $batch->expires_at->getTimestamp() <= now('UTC')->getTimestamp()) {
             $this->reject();
         }
+
+        return $current;
     }
 
     private function lockedWritableProject(RegisterImportBatch $batch): IsmsProject
@@ -395,9 +399,9 @@ class RegisterImportConfirmer
         }
         if ($changedTargets !== []) {
             foreach ($changedTargets as $target) {
-                $this->needInvalidator->invalidateTarget($target);
+                $this->needInvalidator->invalidateTarget($target, $actor);
             }
-            $this->needPropagator->recalculate($project, array_values($changedTargets));
+            $this->needPropagator->recalculate($project, array_values($changedTargets), $actor);
         }
     }
 
@@ -512,6 +516,7 @@ class RegisterImportConfirmer
      */
     private function apply(IsmsProject $project, RegisterImportKind $kind, array $rows, Collection $existing, User $actor): void
     {
+        $statusesChanged = false;
         foreach ($rows as $row) {
             $record = $existing->get($row['key']);
             if (! $record instanceof Model) {
@@ -526,11 +531,16 @@ class RegisterImportConfirmer
             unset($attributes['key'], $attributes['active']);
             if ($record instanceof BusinessProcess) {
                 $updated = $this->processes->update($record, $attributes, $actor, $record->updated_at->toIso8601String(), false);
-                $this->processes->changeStatus($updated, (bool) $row['active'], $actor, false);
+                $statusesChanged = $statusesChanged || $updated->is_active !== (bool) $row['active'];
+                $this->processes->changeStatusForImport($updated, (bool) $row['active'], $actor);
             } elseif ($record instanceof Asset) {
                 $updated = $this->assets->update($record, $attributes, $actor, $record->updated_at->toIso8601String(), false);
-                $this->assets->changeStatus($updated, (bool) $row['active'], $actor, false);
+                $statusesChanged = $statusesChanged || $updated->is_active !== (bool) $row['active'];
+                $this->assets->changeStatusForImport($updated, (bool) $row['active'], $actor);
             }
+        }
+        if ($statusesChanged) {
+            $this->needPropagator->recalculate($project, [], $actor);
         }
     }
 

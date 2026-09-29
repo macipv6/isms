@@ -2,20 +2,26 @@
 
 namespace Tests\Feature\Imports;
 
+use App\Data\Dependencies\DependencyNode;
 use App\Enums\ProjectStatus;
 use App\Enums\RegisterImportKind;
 use App\Enums\RegisterImportStatus;
+use App\Models\Asset;
 use App\Models\AuditEvent;
 use App\Models\BusinessProcess;
+use App\Models\DependencyEdge;
 use App\Models\IsmsProject;
 use App\Models\Organization;
+use App\Models\ProtectionNeed;
 use App\Models\RegisterImportBatch;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use App\Services\Imports\RegisterImportConfirmer;
 use App\Services\Imports\RegisterImportPreviewer;
+use App\Services\ProtectionNeeds\ProtectionNeedService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Tests\TestCase;
@@ -178,6 +184,115 @@ class RegisterImportAtomicityTest extends TestCase
         $this->assertSame(RegisterImportStatus::Pending, $batch->fresh()->status);
         $this->assertNull($batch->fresh()->applied_at);
         $this->assertDatabaseCount('audit_events', $auditCount);
+    }
+
+    public function test_multiple_process_activations_run_one_full_protection_recalculation(): void
+    {
+        [$project, $actor, $first, $second, $asset, $batch] = $this->ratedStatusBatch();
+        $graphReads = 0;
+        DB::listen(function ($query) use (&$graphReads): void {
+            if (str_contains($query->sql, 'from "dependency_edges"') && str_contains($query->sql, '"is_active"')) {
+                $graphReads++;
+            }
+        });
+
+        app(RegisterImportConfirmer::class)->confirm($batch, $actor);
+
+        $this->assertSame(1, $graphReads);
+        $this->assertFalse($first->fresh()->is_active);
+        $this->assertFalse($second->fresh()->is_active);
+        $this->assertNull(ProtectionNeed::query()->where('asset_id', $asset->id)->where('objective', 'confidentiality')->firstOrFail()->inherited_level);
+    }
+
+    public function test_batched_recalculation_audit_failure_rolls_back_all_statuses_and_batch(): void
+    {
+        [$project, $actor, $first, $second, $asset, $batch] = $this->ratedStatusBatch();
+        $before = AuditEvent::query()->count();
+        $this->app->instance(AuditLogger::class, new class extends AuditLogger
+        {
+            public function record(string $eventType, ?User $actor, array $context = [], ?string $organizationId = null): AuditEvent
+            {
+                if ($eventType === 'protection_need.recalculated') {
+                    throw new RuntimeException('audit unavailable');
+                }
+
+                return parent::record($eventType, $actor, $context, $organizationId);
+            }
+        });
+        try {
+            app(RegisterImportConfirmer::class)->confirm($batch, $actor);
+            $this->fail('Expected audit failure.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('audit unavailable', $exception->getMessage());
+        }
+        $this->assertTrue($first->fresh()->is_active);
+        $this->assertTrue($second->fresh()->is_active);
+        $this->assertSame('high', ProtectionNeed::query()->where('asset_id', $asset->id)->where('objective', 'confidentiality')->firstOrFail()->effective_level->value);
+        $this->assertSame(RegisterImportStatus::Pending, $batch->fresh()->status);
+        $this->assertSame($before, AuditEvent::query()->count());
+    }
+
+    public function test_multiple_asset_activations_also_run_one_full_protection_recalculation(): void
+    {
+        [, $project, $actor] = $this->context();
+        $base = ['type' => 'information', 'description' => null, 'owner_name' => null, 'owner_email' => null, 'is_active' => true];
+        $first = Asset::factory()->for($project, 'project')->create([...$base, 'key' => 'A1', 'name' => 'One']);
+        $second = Asset::factory()->for($project, 'project')->create([...$base, 'key' => 'A2', 'name' => 'Two']);
+        $target = Asset::factory()->for($project, 'project')->create(['key' => 'A3']);
+        foreach ([$first, $second] as $asset) {
+            DependencyEdge::query()->create(['project_id' => $project->id, 'source_asset_id' => $asset->id, 'target_asset_id' => $target->id, 'importance' => 'supporting', 'is_active' => true, 'created_by' => $actor->id]);
+        }
+        app(ProtectionNeedService::class)->rateTarget($project, DependencyNode::asset($first), ['confidentiality' => ['level' => 'high', 'rationale' => 'Kritisch']], $actor, ['confidentiality' => 0, 'integrity' => 0, 'availability' => 0]);
+        $contents = "key,name,type,description,owner_name,owner_email,active\nA1,One,information,,,,false\nA2,Two,information,,,,false\n";
+        $path = tempnam(sys_get_temp_dir(), 'asset-import-');
+        file_put_contents($path, $contents);
+        $batch = app(RegisterImportPreviewer::class)->preview($project, RegisterImportKind::Assets, new UploadedFile($path, 'assets.csv', 'text/csv', null, true), $actor);
+        $graphReads = 0;
+        DB::listen(function ($query) use (&$graphReads): void {
+            if (str_contains($query->sql, 'from "dependency_edges"') && str_contains($query->sql, '"is_active"')) {
+                $graphReads++;
+            }
+        });
+
+        app(RegisterImportConfirmer::class)->confirm($batch, $actor);
+
+        $this->assertSame(1, $graphReads);
+        $this->assertFalse($first->fresh()->is_active);
+        $this->assertFalse($second->fresh()->is_active);
+        $this->assertNull(ProtectionNeed::query()->where('asset_id', $target->id)->where('objective', 'confidentiality')->firstOrFail()->inherited_level);
+    }
+
+    public function test_confirm_uses_current_actor_state_for_batched_status_changes(): void
+    {
+        [, $project, $actor] = $this->context();
+        BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P1', 'name' => 'One', 'description' => null, 'owner_name' => null, 'owner_email' => null, 'is_active' => true]);
+        $batch = $this->processPreview($project, $actor, ['P1,One,,,,false']);
+        User::query()->whereKey($actor->id)->update(['is_active' => false]);
+
+        $this->expectImportRejection(fn () => app(RegisterImportConfirmer::class)->confirm($batch, $actor));
+
+        $this->assertDatabaseHas('business_processes', ['project_id' => $project->id, 'key' => 'P1', 'is_active' => true]);
+        $this->assertSame(RegisterImportStatus::Pending, $batch->fresh()->status);
+    }
+
+    private function ratedStatusBatch(): array
+    {
+        [, $project, $actor] = $this->context();
+        $base = ['description' => null, 'owner_name' => null, 'owner_email' => null, 'is_active' => true];
+        $first = BusinessProcess::factory()->for($project, 'project')->create([...$base, 'key' => 'P1', 'name' => 'One']);
+        $second = BusinessProcess::factory()->for($project, 'project')->create([...$base, 'key' => 'P2', 'name' => 'Two']);
+        $asset = Asset::factory()->for($project, 'project')->create();
+        foreach ([$first, $second] as $process) {
+            DependencyEdge::query()->create(['project_id' => $project->id, 'source_process_id' => $process->id, 'target_asset_id' => $asset->id, 'importance' => 'supporting', 'is_active' => true, 'created_by' => $actor->id]);
+        }
+        app(ProtectionNeedService::class)->rateTarget($project, DependencyNode::process($first), [
+            'confidentiality' => ['level' => 'high', 'rationale' => 'Kritisch'],
+            'integrity' => ['level' => 'normal', 'rationale' => 'Prüfbar'],
+            'availability' => ['level' => 'normal', 'rationale' => 'Ersatz'],
+        ], $actor, ['confidentiality' => 0, 'integrity' => 0, 'availability' => 0]);
+        $batch = $this->processPreview($project, $actor, ['P1,One,,,,false', 'P2,Two,,,,false']);
+
+        return [$project, $actor, $first, $second, $asset, $batch];
     }
 
     /** @return array{Organization, IsmsProject, User} */

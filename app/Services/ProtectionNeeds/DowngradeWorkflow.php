@@ -45,6 +45,7 @@ class DowngradeWorkflow
                 'requested_by' => $actor->id, 'status' => DowngradeRequestStatus::Pending,
             ]);
             $this->audit->record('protection_need.downgrade_requested', $actor, ['project_id' => $project->id, 'protection_need_id' => $need->id, 'objective' => $need->objective->value, 'new_level' => $requested->value, 'new_status' => 'pending'], $project->organization_id);
+            $this->propagator->recalculate($project, [$this->node($need)], $actor);
 
             return $request;
         });
@@ -63,7 +64,7 @@ class DowngradeWorkflow
             }
             $request->update(['status' => $approved ? DowngradeRequestStatus::Approved : DowngradeRequestStatus::Rejected, 'decision_channel' => 'internal', 'decided_by' => $decider->id, 'decision_rationale' => trim($rationale), 'decided_at' => now()]);
             $this->auditDecision($request, $need, $project, $decider);
-            $this->propagator->recalculate($project, [$this->node($need)]);
+            $this->propagator->recalculate($project, [$this->node($need)], $decider);
 
             return $request->refresh();
         });
@@ -97,7 +98,7 @@ class DowngradeWorkflow
                 'external_evidence_id' => $evidence?->id, 'decided_at' => now(),
             ]);
             $this->auditDecision($request, $need, $project, $recorder);
-            $this->propagator->recalculate($project, [$this->node($need)]);
+            $this->propagator->recalculate($project, [$this->node($need)], $recorder);
 
             return $request->refresh();
         });

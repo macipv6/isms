@@ -58,6 +58,21 @@ class DowngradeWorkflowTest extends TestCase
         $this->assertSame('invalidated', $request->fresh()->status->value);
     }
 
+    public function test_new_pending_request_restores_inherited_level_after_prior_approval(): void
+    {
+        [$project, $requester, $second, $need] = $this->context();
+        $workflow = app(DowngradeWorkflow::class);
+        $approved = $workflow->request($need, ProtectionLevel::Normal, 'Erste Begründung', $requester);
+        $workflow->decideInternal($approved, true, 'Genehmigt', $second);
+        $this->assertSame(ProtectionLevel::Normal, $need->fresh()->effective_level);
+
+        $pending = $workflow->request($need, ProtectionLevel::Normal, 'Neue Prüfung', $requester);
+
+        $this->assertSame(ProtectionLevel::High, $need->fresh()->effective_level);
+        $this->assertSame('superseded', $approved->fresh()->status->value);
+        $this->assertSame('pending', $pending->fresh()->status->value);
+    }
+
     private function context(): array
     {
         $project = IsmsProject::factory()->for(Organization::factory()->state(['organization_type' => 'customer', 'entra_tenant_id' => null]))->create();
