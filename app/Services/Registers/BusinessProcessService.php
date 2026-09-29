@@ -2,12 +2,17 @@
 
 namespace App\Services\Registers;
 
+use App\Data\Dependencies\DependencyNode;
 use App\Enums\ProjectStatus;
 use App\Enums\UserRole;
 use App\Models\BusinessProcess;
 use App\Models\IsmsProject;
+use App\Models\ProtectionNeed;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
+use App\Services\ProtectionNeeds\ProtectionNeedInitializer;
+use App\Services\ProtectionNeeds\ProtectionNeedInvalidator;
+use App\Services\ProtectionNeeds\ProtectionNeedPropagator;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -15,7 +20,7 @@ use Illuminate\Validation\ValidationException;
 
 class BusinessProcessService
 {
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(private readonly AuditLogger $audit, private readonly ProtectionNeedInitializer $needs, private readonly ProtectionNeedPropagator $propagator, private readonly ProtectionNeedInvalidator $invalidator) {}
 
     /** @param array<string, mixed> $attributes */
     public function create(IsmsProject $project, array $attributes, User $actor, bool $audit = true): BusinessProcess
@@ -31,6 +36,7 @@ class BusinessProcessService
             $active = $data['active'];
             unset($data['active']);
             $process = BusinessProcess::query()->create([...$data, 'project_id' => $lockedProject->id, 'is_active' => $active, 'created_by' => $actor->id]);
+            $this->needs->ensureTarget(DependencyNode::process($process));
             if ($audit) {
                 $this->audit->record('business_process.created', $actor, ['project_id' => $lockedProject->id, 'business_process_id' => $process->id, 'key' => $process->key], $lockedProject->organization_id);
             }
@@ -76,6 +82,10 @@ class BusinessProcessService
             }
             $old = $locked->is_active;
             $locked->update(['is_active' => $active]);
+            foreach (ProtectionNeed::query()->where('business_process_id', $locked->id)->get() as $need) {
+                $this->invalidator->invalidate($need);
+            }
+            $this->propagator->recalculate($project);
             if ($audit) {
                 $this->audit->record('business_process.status_changed', $actor, ['project_id' => $project->id, 'business_process_id' => $locked->id, 'key' => $locked->key, 'old_active' => $old ? 'true' : 'false', 'new_active' => $active ? 'true' : 'false'], $project->organization_id);
             }

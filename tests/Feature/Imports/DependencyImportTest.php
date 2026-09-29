@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Imports;
 
+use App\Data\Dependencies\DependencyNode;
 use App\Enums\DependencyImportance;
 use App\Enums\RegisterImportKind;
 use App\Enums\RegisterImportStatus;
@@ -11,10 +12,12 @@ use App\Models\BusinessProcess;
 use App\Models\DependencyEdge;
 use App\Models\IsmsProject;
 use App\Models\Organization;
+use App\Models\ProtectionNeed;
 use App\Models\RegisterImportBatch;
 use App\Models\User;
 use App\Services\Imports\RegisterImportConfirmer;
 use App\Services\Imports\RegisterImportPreviewer;
+use App\Services\ProtectionNeeds\ProtectionNeedService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
@@ -112,6 +115,11 @@ class DependencyImportTest extends TestCase
         $first = Asset::factory()->for($project, 'project')->create(['key' => 'FIRST']);
         $second = Asset::factory()->for($project, 'project')->create(['key' => 'SECOND']);
         $third = Asset::factory()->for($project, 'project')->create(['key' => 'THIRD']);
+        app(ProtectionNeedService::class)->rateTarget($project, DependencyNode::process($process), [
+            'confidentiality' => ['level' => 'very_high', 'rationale' => 'Kritisch'],
+            'integrity' => ['level' => 'normal', 'rationale' => 'Prüfbar'],
+            'availability' => ['level' => 'normal', 'rationale' => 'Ersatz'],
+        ], $actor, ['confidentiality' => 0, 'integrity' => 0, 'availability' => 0]);
         $batch = $this->preview($project, $actor, [
             'asset, second ,asset, third ,supporting,,true',
             'asset, first ,asset, second ,critical,,true',
@@ -123,6 +131,7 @@ class DependencyImportTest extends TestCase
         $this->assertDatabaseHas('dependency_edges', ['source_asset_id' => $second->id, 'target_asset_id' => $third->id, 'is_active' => true]);
         $this->assertDatabaseHas('dependency_edges', ['source_asset_id' => $first->id, 'target_asset_id' => $second->id, 'is_active' => true]);
         $this->assertDatabaseHas('dependency_edges', ['source_process_id' => $process->id, 'target_asset_id' => $first->id, 'is_active' => true]);
+        $this->assertSame('very_high', ProtectionNeed::query()->where('asset_id', $third->id)->where('objective', 'confidentiality')->firstOrFail()->effective_level->value);
     }
 
     public function test_existing_edge_can_be_deactivated_and_its_metadata_updated_after_an_endpoint_becomes_inactive(): void

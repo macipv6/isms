@@ -17,6 +17,8 @@ use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use App\Services\Dependencies\DependencyCycleDetector;
 use App\Services\Dependencies\DependencyService;
+use App\Services\ProtectionNeeds\ProtectionNeedInvalidator;
+use App\Services\ProtectionNeeds\ProtectionNeedPropagator;
 use App\Services\Registers\AssetService;
 use App\Services\Registers\BusinessProcessService;
 use Illuminate\Database\Eloquent\Model;
@@ -35,6 +37,8 @@ class RegisterImportConfirmer
         private readonly RegisterImportStateFingerprint $stateFingerprint,
         private readonly DependencyCycleDetector $cycleDetector,
         private readonly DependencyService $dependencies,
+        private readonly ProtectionNeedInvalidator $needInvalidator,
+        private readonly ProtectionNeedPropagator $needPropagator,
     ) {}
 
     public function confirm(RegisterImportBatch $batch, User $actor): RegisterImportBatch
@@ -364,6 +368,7 @@ class RegisterImportConfirmer
      */
     private function applyDependencies(IsmsProject $project, array $rows, User $actor): void
     {
+        $changedTargets = [];
         foreach ($rows as $row) {
             if ($row['existing'] instanceof DependencyEdge
                 && $row['existing']->importance->value === $row['values']['importance']
@@ -371,6 +376,7 @@ class RegisterImportConfirmer
                 && $row['existing']->is_active === $row['values']['active']) {
                 continue;
             }
+            $graphChanged = $row['existing'] === null || $row['existing']->is_active !== $row['values']['active'];
             $this->dependencies->upsertFromImport(
                 $project,
                 $row['source'],
@@ -383,6 +389,15 @@ class RegisterImportConfirmer
                 $row['existing'],
                 $actor,
             );
+            if ($graphChanged) {
+                $changedTargets[$row['target']->identity()] = $row['target'];
+            }
+        }
+        if ($changedTargets !== []) {
+            foreach ($changedTargets as $target) {
+                $this->needInvalidator->invalidateTarget($target);
+            }
+            $this->needPropagator->recalculate($project, array_values($changedTargets));
         }
     }
 

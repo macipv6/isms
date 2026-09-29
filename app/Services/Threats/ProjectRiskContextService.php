@@ -11,12 +11,13 @@ use App\Models\RiskMethodologyVersion;
 use App\Models\ThreatCatalogVersion;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
+use App\Services\ProtectionNeeds\ProtectionNeedPropagator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class ProjectRiskContextService
 {
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(private readonly AuditLogger $audit, private readonly ProtectionNeedPropagator $propagator) {}
 
     public function initialize(IsmsProject $project, RiskMethodologyVersion $methodology, ThreatCatalogVersion $catalog, User $actor): ProjectRiskContext
     {
@@ -42,6 +43,7 @@ class ProjectRiskContextService
                 'initialized_at' => now(),
             ]);
             $this->copyCatalog($context, $catalog, $actor);
+            $this->propagator->recalculate($project);
             $this->recordChange($context, 'initialized', null, $methodology, null, $catalog, $actor);
             $this->audit->record('risk_context.initialized', $actor, [
                 'project_id' => $project->id,
@@ -75,6 +77,7 @@ class ProjectRiskContextService
                 $this->copyCatalog($context, $catalog, $actor);
             }
             $context->update(['methodology_version_id' => $methodology->id, 'catalog_version_id' => $catalog->id]);
+            $this->propagator->recalculate($project);
             $this->recordChange($context, 'migrated', $oldMethodology, $methodology, $oldCatalog, $catalog, $actor);
             $this->audit->record('risk_context.migrated', $actor, [
                 'project_id' => $project->id,

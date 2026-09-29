@@ -44,6 +44,11 @@ class AuditLogger
         'import_batch_id',
         'import_kind',
         'row_counts',
+        'protection_need_id',
+        'downgrade_request_id',
+        'objective',
+        'new_level',
+        'decision_channel',
     ];
 
     /**

@@ -139,4 +139,10 @@ class IsmsProject extends Model
     {
         return $this->hasMany(ProjectThreat::class, 'project_id');
     }
+
+    /** @return HasMany<ProtectionNeed, $this> */
+    public function protectionNeeds(): HasMany
+    {
+        return $this->hasMany(ProtectionNeed::class, 'project_id');
+    }
 }
