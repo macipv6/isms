@@ -82,6 +82,39 @@ class RiskMethodologyWorkflowTest extends TestCase
         }
     }
 
+    public function test_publish_rechecks_a_loaded_admin_after_database_deactivation(): void
+    {
+        $version = RiskMethodologyVersion::factory()->draftWithCompleteMatrix()->create();
+        $actor = $this->admin();
+        DB::table('users')->where('id', $actor->id)->update(['is_active' => false]);
+
+        $this->expectException(ValidationException::class);
+        app(RiskMethodologyPublisher::class)->publish($version, $actor);
+    }
+
+    public function test_clone_rechecks_a_loaded_admin_after_database_role_change(): void
+    {
+        $this->seed(RiskMethodologySeeder::class);
+        $source = RiskMethodologyVersion::query()->sole();
+        $actor = $this->admin();
+        DB::table('users')->where('id', $actor->id)->update(['role' => UserRole::Consultant->value]);
+
+        $this->expectException(ValidationException::class);
+        app(RiskMethodologyPublisher::class)->clonePublished($source, 'Adaptation', $actor);
+    }
+
+    public function test_draft_replacement_rechecks_a_loaded_admin_after_database_deactivation(): void
+    {
+        $version = RiskMethodologyVersion::factory()->draftWithCompleteMatrix()->create();
+        $actor = $this->admin();
+        $levels = $this->levels($version);
+        $cells = $this->cells($version);
+        DB::table('users')->where('id', $actor->id)->update(['is_active' => false]);
+
+        $this->expectException(ValidationException::class);
+        app(RiskMethodologyPublisher::class)->replaceDraftMatrix($version, $levels, $cells, $actor);
+    }
+
     public function test_published_version_and_children_reject_raw_mutation(): void
     {
         $this->seed(RiskMethodologySeeder::class);
@@ -151,7 +184,7 @@ class RiskMethodologyWorkflowTest extends TestCase
         $this->assertCount(16, $clone->matrixCells);
         $this->assertNotSame($source->frequencies()->firstOrFail()->id, $clone->frequencies()->firstOrFail()->id);
         $this->assertSame('high', app(RiskMatrix::class)->category($clone, 'frequent', 'limited')->key);
-        $this->assertSame('BSI Standard 200-3', $clone->source_reference);
+        $this->assertSame($source->source_reference, $clone->source_reference);
     }
 
     public function test_replacing_draft_matrix_audits_field_names_without_descriptions(): void

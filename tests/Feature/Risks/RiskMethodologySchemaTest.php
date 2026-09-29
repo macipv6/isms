@@ -2,7 +2,10 @@
 
 namespace Tests\Feature\Risks;
 
+use App\Models\AuditEvent;
 use App\Models\RiskMethodologyVersion;
+use App\Models\User;
+use App\Services\Audit\AuditLogger;
 use App\Services\RiskMethodology\RiskMatrix;
 use Database\Seeders\RiskMethodologySeeder;
 use Illuminate\Database\QueryException;
@@ -11,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 use Tests\TestCase;
 
 class RiskMethodologySchemaTest extends TestCase
@@ -66,6 +70,57 @@ class RiskMethodologySchemaTest extends TestCase
             'high' => 'Die bereits umgesetzten oder zumindest im Sicherheitskonzept vorgesehenen Sicherheitsmaßnahmen bieten keinen ausreichenden Schutz vor der jeweiligen Gefährdung.',
             'very_high' => 'Die bereits umgesetzten oder zumindest im Sicherheitskonzept vorgesehenen Sicherheitsmaßnahmen bieten keinen ausreichenden Schutz vor der jeweiligen Gefährdung. In der Praxis werden sehr hohe Risiken selten akzeptiert.',
         ], $version->riskLevels->pluck('description', 'key')->all());
+    }
+
+    public function test_seeded_publication_records_a_system_audit_once_with_only_ids(): void
+    {
+        $this->seed(RiskMethodologySeeder::class);
+        $this->seed(RiskMethodologySeeder::class);
+        $version = RiskMethodologyVersion::query()->sole();
+        $event = AuditEvent::query()->where('event_type', 'risk_methodology.published')->sole();
+
+        $this->assertNull($event->actor_user_id);
+        $this->assertNull($event->organization_id);
+        $this->assertNull($version->published_by);
+        $this->assertSame(['source_id' => $version->methodology_id, 'target_id' => $version->id], $event->context);
+    }
+
+    public function test_seeded_publication_rolls_back_when_system_audit_fails(): void
+    {
+        $this->app->bind(AuditLogger::class, fn () => new class extends AuditLogger
+        {
+            public function record(string $eventType, ?User $actor, array $context = [], ?string $organizationId = null): AuditEvent
+            {
+                throw new RuntimeException('Audit unavailable');
+            }
+        });
+
+        try {
+            $this->seed(RiskMethodologySeeder::class);
+            $this->fail('The failed system audit should abort seeding.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('Audit unavailable', $exception->getMessage());
+            $this->assertDatabaseCount('risk_methodologies', 0);
+            $this->assertDatabaseCount('risk_methodology_versions', 0);
+            $this->assertDatabaseCount('risk_matrix_cells', 0);
+        }
+    }
+
+    public function test_seed_documents_the_source_edition_and_exact_labels_and_orders(): void
+    {
+        $this->seed(RiskMethodologySeeder::class);
+        $version = RiskMethodologyVersion::query()->sole();
+
+        $this->assertSame('BSI Standard 200-3: Risikoanalyse auf der Basis von IT-Grundschutz, Version 1.0 (Oktober 2017)', $version->source_reference);
+        $this->assertSame([
+            ['rare', 'Selten', 1], ['medium', 'Mittel', 2], ['frequent', 'Häufig', 3], ['very_frequent', 'Sehr häufig', 4],
+        ], $version->frequencies->map(fn ($level) => [$level->key, $level->label, $level->sort_order])->all());
+        $this->assertSame([
+            ['negligible', 'Vernachlässigbar', 1], ['limited', 'Begrenzt', 2], ['considerable', 'Beträchtlich', 3], ['existential', 'Existenzbedrohend', 4],
+        ], $version->impacts->map(fn ($level) => [$level->key, $level->label, $level->sort_order])->all());
+        $this->assertSame([
+            ['low', 'Gering', 1], ['medium', 'Mittel', 2], ['high', 'Hoch', 3], ['very_high', 'Sehr hoch', 4],
+        ], $version->riskLevels->map(fn ($level) => [$level->key, $level->label, $level->sort_order])->all());
     }
 
     public function test_version_number_is_unique_within_methodology(): void

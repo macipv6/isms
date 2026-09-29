@@ -17,9 +17,8 @@ class RiskMethodologyPublisher
 
     public function publish(RiskMethodologyVersion $version, User $actor): RiskMethodologyVersion
     {
-        $this->requireAdmin($actor);
-
         return DB::transaction(function () use ($version, $actor): RiskMethodologyVersion {
+            $actor = $this->requireAdmin($actor);
             $locked = RiskMethodologyVersion::query()->lockForUpdate()->findOrFail($version->id);
             $this->requireDraft($locked);
             $this->validateStoredMatrix($locked);
@@ -39,12 +38,12 @@ class RiskMethodologyPublisher
 
     public function clonePublished(RiskMethodologyVersion $source, string $description, User $actor): RiskMethodologyVersion
     {
-        $this->requireAdmin($actor);
         if (trim($description) === '') {
             throw ValidationException::withMessages(['description' => 'A description is required.']);
         }
 
         return DB::transaction(function () use ($source, $description, $actor): RiskMethodologyVersion {
+            $actor = $this->requireAdmin($actor);
             $locked = RiskMethodologyVersion::query()->lockForUpdate()->findOrFail($source->id);
             if ($locked->status !== PublicationStatus::Published) {
                 throw ValidationException::withMessages(['version' => 'Only a published methodology can be cloned.']);
@@ -88,10 +87,10 @@ class RiskMethodologyPublisher
      */
     public function replaceDraftMatrix(RiskMethodologyVersion $draft, array $levels, array $cells, User $actor): RiskMethodologyVersion
     {
-        $this->requireAdmin($actor);
         $this->validateInputMatrix($levels, $cells);
 
         return DB::transaction(function () use ($draft, $levels, $cells, $actor): RiskMethodologyVersion {
+            $actor = $this->requireAdmin($actor);
             $locked = RiskMethodologyVersion::query()->lockForUpdate()->findOrFail($draft->id);
             $this->requireDraft($locked);
             $changed = $this->changedFields($locked, $levels, $cells);
@@ -126,12 +125,15 @@ class RiskMethodologyPublisher
         });
     }
 
-    private function requireAdmin(User $actor): void
+    private function requireAdmin(User $actor): User
     {
-        $organization = $actor->organization;
-        if (! $actor->is_active || $actor->role !== UserRole::Admin || ! $organization || ! $organization->is_active || $organization->organization_type !== 'internal') {
+        $current = User::query()->lockForUpdate()->find($actor->id);
+        $organization = $current?->organization()->lockForUpdate()->first();
+        if (! $current || ! $current->is_active || $current->role !== UserRole::Admin || ! $organization || ! $organization->is_active || $organization->organization_type !== 'internal') {
             throw ValidationException::withMessages(['actor' => 'An active internal administrator is required.']);
         }
+
+        return $current;
     }
 
     private function requireDraft(RiskMethodologyVersion $version): void

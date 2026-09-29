@@ -4,12 +4,15 @@ namespace Database\Seeders;
 
 use App\Enums\PublicationStatus;
 use App\Models\RiskMethodology;
+use App\Services\Audit\AuditLogger;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
 class RiskMethodologySeeder extends Seeder
 {
+    public function __construct(private readonly AuditLogger $audit) {}
+
     public function run(): void
     {
         DB::transaction(function (): void {
@@ -25,7 +28,7 @@ class RiskMethodologySeeder extends Seeder
                 'version' => 1,
                 'status' => PublicationStatus::Draft,
                 'description' => 'BSI 200-3 Standard-Risikomatrix',
-                'source_reference' => 'BSI Standard 200-3',
+                'source_reference' => 'BSI Standard 200-3: Risikoanalyse auf der Basis von IT-Grundschutz, Version 1.0 (Oktober 2017)',
             ]);
 
             $frequencies = [
@@ -69,6 +72,10 @@ class RiskMethodologySeeder extends Seeder
             $version->update([
                 'status' => PublicationStatus::Published,
                 'published_at' => CarbonImmutable::parse('2026-09-22T00:00:00+00:00'),
+            ]);
+            $this->audit->record('risk_methodology.published', null, [
+                'source_id' => $methodology->id,
+                'target_id' => $version->id,
             ]);
         });
     }
