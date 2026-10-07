@@ -22,9 +22,9 @@ class ProtectionNeedPropagator
     /** @param list<DependencyNode> $roots
      * @return Collection<int, ProtectionNeed>
      */
-    public function recalculate(IsmsProject $project, array $roots = [], ?User $actor = null): Collection
+    public function recalculate(IsmsProject $project, array $roots = [], ?User $actor = null, bool $recordAudit = true): Collection
     {
-        return DB::transaction(function () use ($project, $roots, $actor): Collection {
+        return DB::transaction(function () use ($project, $roots, $actor, $recordAudit): Collection {
             $locked = $this->access->project($project);
             $nodes = [];
             foreach (BusinessProcess::query()->where('project_id', $locked->id)->where('is_active', true)->get() as $process) {
@@ -129,7 +129,7 @@ class ProtectionNeedPropagator
                     $oldEffective = $need->effective_level;
                     $invalidated = false;
                     if (isset($affected[$id]) && ($inheritedChanged || $sourceChanged)) {
-                        $invalidated = $this->invalidator->invalidate($need, $actor);
+                        $invalidated = $this->invalidator->invalidate($need, $actor, $recordAudit);
                         $need->refresh();
                         $need->sources()->delete();
                         foreach ($sources as $source) {
@@ -155,18 +155,20 @@ class ProtectionNeedPropagator
                             $need->lock_version++;
                         }
                         $need->save();
-                        $this->audit->record('protection_need.recalculated', $actor, [
-                            'project_id' => $locked->id,
-                            'protection_need_id' => $need->id,
-                            'objective' => $key,
-                            'old_level' => $oldEffective?->value,
-                            'new_level' => $effective?->value,
-                            'changed_fields' => array_values(array_filter([
-                                $sourceChanged ? 'sources' : null,
-                                $inheritedChanged ? 'inherited_level' : null,
-                                $effectiveChanged ? 'effective_level' : null,
-                            ])),
-                        ], $locked->organization_id);
+                        if ($recordAudit) {
+                            $this->audit->record('protection_need.recalculated', $actor, [
+                                'project_id' => $locked->id,
+                                'protection_need_id' => $need->id,
+                                'objective' => $key,
+                                'old_level' => $oldEffective?->value,
+                                'new_level' => $effective?->value,
+                                'changed_fields' => array_values(array_filter([
+                                    $sourceChanged ? 'sources' : null,
+                                    $inheritedChanged ? 'inherited_level' : null,
+                                    $effectiveChanged ? 'effective_level' : null,
+                                ])),
+                            ], $locked->organization_id);
+                        }
                         $changed->push($need);
                     }
                     if ($effective) {

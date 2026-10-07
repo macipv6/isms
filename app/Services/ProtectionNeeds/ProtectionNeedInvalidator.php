@@ -12,7 +12,7 @@ class ProtectionNeedInvalidator
 {
     public function __construct(private readonly AuditLogger $audit) {}
 
-    public function invalidate(ProtectionNeed $need, ?User $actor = null): bool
+    public function invalidate(ProtectionNeed $need, ?User $actor = null, bool $recordAudit = true): bool
     {
         $requestCount = $need->downgradeRequests()->whereIn('status', ['pending', 'approved'])->update(['status' => 'invalidated']);
         $priorAssessment = $need->status->value !== 'draft' || $need->direct_level !== null || $need->inherited_level !== null || $need->effective_level !== null;
@@ -21,16 +21,18 @@ class ProtectionNeedInvalidator
             return false;
         }
         $need->update(['needs_review' => true, 'lock_version' => $need->lock_version + 1]);
-        $this->audit->record('protection_need.invalidated', $actor, [
-            'project_id' => $need->project_id,
-            'protection_need_id' => $need->id,
-            'objective' => $need->objective->value,
-            'new_status' => 'needs_review',
-            'changed_fields' => array_values(array_filter([
-                $reviewChanged ? 'needs_review' : null,
-                $requestCount > 0 ? 'downgrade_requests' : null,
-            ])),
-        ], $need->project->organization_id);
+        if ($recordAudit) {
+            $this->audit->record('protection_need.invalidated', $actor, [
+                'project_id' => $need->project_id,
+                'protection_need_id' => $need->id,
+                'objective' => $need->objective->value,
+                'new_status' => 'needs_review',
+                'changed_fields' => array_values(array_filter([
+                    $reviewChanged ? 'needs_review' : null,
+                    $requestCount > 0 ? 'downgrade_requests' : null,
+                ])),
+            ], $need->project->organization_id);
+        }
 
         return true;
     }

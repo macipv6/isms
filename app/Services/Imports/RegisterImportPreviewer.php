@@ -5,6 +5,7 @@ namespace App\Services\Imports;
 use App\Data\Imports\ParsedRegisterCsv;
 use App\Data\Imports\RegisterImportPreview;
 use App\Enums\ProjectStatus;
+use App\Enums\ProtectionLevel;
 use App\Enums\RegisterImportKind;
 use App\Enums\RegisterImportStatus;
 use App\Enums\UserRole;
@@ -13,6 +14,7 @@ use App\Models\Asset;
 use App\Models\BusinessProcess;
 use App\Models\DependencyEdge;
 use App\Models\IsmsProject;
+use App\Models\ProtectionNeed;
 use App\Models\RegisterImportBatch;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
@@ -70,7 +72,8 @@ class RegisterImportPreviewer
                 'applied_at' => null,
             ]);
             $this->audit->record(
-                $preview->status === RegisterImportStatus::Pending ? 'register_import.previewed' : 'register_import.rejected',
+                ($kind === RegisterImportKind::ProtectionNeeds ? 'protection_needs_import.' : 'register_import.')
+                    .($preview->status === RegisterImportStatus::Pending ? 'previewed' : 'rejected'),
                 $actor,
                 [
                     'project_id' => $lockedProject->id,
@@ -91,7 +94,169 @@ class RegisterImportPreviewer
             RegisterImportKind::Processes => $this->categorizeRecords($parsed, BusinessProcess::query()->where('project_id', $project->id)->get()->keyBy('key'), ['name', 'description', 'owner_name', 'owner_email']),
             RegisterImportKind::Assets => $this->categorizeRecords($parsed, Asset::query()->where('project_id', $project->id)->get()->keyBy('key'), ['name', 'type', 'description', 'owner_name', 'owner_email']),
             RegisterImportKind::Dependencies => $this->categorizeDependencies($project, $parsed),
+            RegisterImportKind::ProtectionNeeds => $this->categorizeProtectionNeeds($project, $parsed),
         };
+    }
+
+    private function categorizeProtectionNeeds(IsmsProject $project, ParsedRegisterCsv $parsed): RegisterImportPreview
+    {
+        $keys = array_map(fn ($row): string => $row->values['object_key'], $parsed->rows);
+        $processes = BusinessProcess::query()->where('project_id', $project->id)->whereIn('key', $keys)->get()->keyBy('key');
+        $assets = Asset::query()->where('project_id', $project->id)->whereIn('key', $keys)->get()->keyBy('key');
+        $needs = collect(ProtectionNeed::query()->where('project_id', $project->id)->with(['downgradeRequests', 'sources'])->get()
+            ->groupBy(fn (ProtectionNeed $need): string => ($need->business_process_id ? 'process:'.$need->business_process_id : 'asset:'.$need->asset_id))->all());
+        $projectedInheritance = $this->projectedInheritance($project, $parsed, $processes, $assets, $needs);
+        $payload = [];
+        $rows = [];
+        foreach ($parsed->rows as $row) {
+            $values = $row->values;
+            $payload[] = $values;
+            $record = ($values['object_type'] === 'process' ? $processes : $assets)->get($values['object_key']);
+            if ($record === null || ! $record->is_active) {
+                $rows[] = ['line' => $row->line, 'category' => 'invalid', 'code' => $record === null ? 'unknown_endpoint' : 'inactive_endpoint', 'values' => $values];
+
+                continue;
+            }
+            $current = $needs->get($values['object_type'].':'.$record->id, collect())->keyBy(fn (ProtectionNeed $need): string => $need->objective->value);
+            $isNew = $current->isEmpty() || $current->every(fn (ProtectionNeed $need): bool => $need->direct_level === null);
+            $category = $isNew ? 'new' : 'unchanged';
+            $downgrade = false;
+            foreach (['confidentiality', 'integrity', 'availability'] as $objective) {
+                $need = $current->get($objective);
+                if ($need === null || $need->direct_level?->value !== $values[$objective] || $need->direct_rationale !== $values[$objective.'_rationale']) {
+                    $category = $isNew ? 'new' : 'changed';
+                }
+                $projected = $projectedInheritance[$values['object_type'].':'.$record->id][$objective] ?? null;
+                $inherited = $projected['level'] ?? null;
+                if ($inherited && $inherited->rank() > ProtectionLevel::from($values[$objective])->rank()) {
+                    $approved = $need?->downgradeRequests->contains(fn ($request): bool => $request->status->value === 'approved' && $request->inherited_level->value === $inherited->value && $request->requested_level->value === $values[$objective]) ?? false;
+                    $directChanged = $need?->direct_level?->value !== $values[$objective] || $need?->direct_rationale !== $values[$objective.'_rationale'];
+                    $downgrade = $downgrade || $directChanged || ! $approved || ! $this->sameProjectedSources($need, $projected['sources']);
+                }
+            }
+            $rows[] = ['line' => $row->line, 'category' => $category, 'code' => null, 'values' => $values, 'requires_downgrade_approval' => $downgrade];
+        }
+        $preview = $this->buildPreview($payload, $rows);
+
+        return new RegisterImportPreview($preview->payload, [...$preview->summary, 'state_fingerprint' => $this->stateFingerprint->makeProtectionNeeds($project, $payload)], $preview->status);
+    }
+
+    /**
+     * @param  Collection<string, BusinessProcess>  $processes
+     * @param  Collection<string, Asset>  $assets
+     * @param  Collection<int|string, \Illuminate\Database\Eloquent\Collection<int, ProtectionNeed>>  $needs
+     * @return array<string, array<string, array{level: ProtectionLevel, sources: list<array{origin: string, level: string, edge: string|null}>}>>
+     */
+    private function projectedInheritance(IsmsProject $project, ParsedRegisterCsv $parsed, Collection $processes, Collection $assets, Collection $needs): array
+    {
+        $nodes = [];
+        foreach (BusinessProcess::query()->where('project_id', $project->id)->where('is_active', true)->pluck('id') as $id) {
+            $nodes['process:'.$id] = true;
+        }
+        foreach (Asset::query()->where('project_id', $project->id)->where('is_active', true)->pluck('id') as $id) {
+            $nodes['asset:'.$id] = true;
+        }
+        $own = [];
+        foreach ($parsed->rows as $row) {
+            $record = ($row->values['object_type'] === 'process' ? $processes : $assets)->get($row->values['object_key']);
+            if ($record && $record->is_active) {
+                foreach (['confidentiality', 'integrity', 'availability'] as $objective) {
+                    $own[$row->values['object_type'].':'.$record->id][$objective] = [
+                        'level' => ProtectionLevel::from($row->values[$objective]),
+                        'rationale' => $row->values[$objective.'_rationale'],
+                    ];
+                }
+            }
+        }
+        $out = [];
+        $indegree = array_fill_keys(array_keys($nodes), 0);
+        foreach (DependencyEdge::query()->where('project_id', $project->id)->where('is_active', true)->get() as $edge) {
+            $source = $edge->source_process_id ? 'process:'.$edge->source_process_id : 'asset:'.$edge->source_asset_id;
+            $target = $edge->target_process_id ? 'process:'.$edge->target_process_id : 'asset:'.$edge->target_asset_id;
+            if (isset($nodes[$source], $nodes[$target])) {
+                $out[$source][] = [$target, $edge->id];
+                $indegree[$target]++;
+            }
+        }
+        $ready = array_keys(array_filter($indegree, fn (int $count): bool => $count === 0));
+        $incoming = [];
+        $projected = [];
+        while ($ready !== []) {
+            $node = array_pop($ready);
+            $current = $needs->get($node, collect())->keyBy(fn (ProtectionNeed $need): string => $need->objective->value);
+            foreach (['confidentiality', 'integrity', 'availability'] as $objective) {
+                $need = $current->get($objective);
+                $direct = $own[$node][$objective]['level'] ?? $need?->direct_level;
+                $rationale = $own[$node][$objective]['rationale'] ?? $need?->direct_rationale;
+                $candidates = $incoming[$node][$objective] ?? [];
+                $upstream = null;
+                foreach ($candidates as $candidate) {
+                    if ($upstream === null || $candidate['level']->rank() > $upstream->rank()) {
+                        $upstream = $candidate['level'];
+                    }
+                }
+                $sources = [];
+                foreach ($candidates as $candidate) {
+                    if ($candidate['level'] === $upstream && (! isset($sources[$candidate['origin']]) || $candidate['edge'] < $sources[$candidate['origin']]['edge'])) {
+                        $sources[$candidate['origin']] = $candidate;
+                    }
+                }
+                ksort($sources);
+                $sourceStates = array_values(array_map(fn (array $source): array => [
+                    'origin' => $source['origin'], 'level' => $source['level']->value, 'edge' => $source['edge'],
+                ], $sources));
+                if ($upstream !== null) {
+                    $projected[$node][$objective] = ['level' => $upstream, 'sources' => $sourceStates];
+                }
+                $changed = array_key_exists($node, $own) && ($need?->direct_level !== $direct || $need?->direct_rationale !== $rationale);
+                $approved = ! $changed && $this->sameProjectedSources($need, $sourceStates)
+                    && ($need?->downgradeRequests->contains(fn ($request): bool => $request->status->value === 'approved' && $request->inherited_level === $upstream && $request->requested_level === $direct) ?? false);
+                if ($upstream && (! $direct || ($upstream->rank() > $direct->rank() && ! $approved))) {
+                    $effective = $upstream;
+                } elseif ($direct) {
+                    $effective = $direct;
+                } else {
+                    continue;
+                }
+                $origins = [];
+                if ($direct === $effective) {
+                    $origins[$node] = ['origin' => $node, 'level' => $effective, 'edge' => null];
+                }
+                if ($upstream === $effective) {
+                    foreach ($sources as $source) {
+                        $origins[$source['origin']] = $source;
+                    }
+                }
+                foreach ($out[$node] ?? [] as [$target, $edgeId]) {
+                    foreach ($origins as $origin) {
+                        $incoming[$target][$objective][] = [...$origin, 'edge' => $origin['edge'] ?? $edgeId];
+                    }
+                }
+            }
+            foreach ($out[$node] ?? [] as [$target]) {
+                if (--$indegree[$target] === 0) {
+                    $ready[] = $target;
+                }
+            }
+        }
+
+        return $projected;
+    }
+
+    /** @param list<array{origin: string, level: string, edge: string|null}> $projected */
+    private function sameProjectedSources(?ProtectionNeed $need, array $projected): bool
+    {
+        if ($need === null) {
+            return $projected === [];
+        }
+
+        $current = $need->sources->map(fn ($source): array => [
+            'origin' => $source->origin_process_id ? 'process:'.$source->origin_process_id : 'asset:'.$source->origin_asset_id,
+            'level' => $source->origin_level->value,
+            'edge' => $source->first_edge_id,
+        ])->sortBy('origin')->values()->all();
+
+        return $current === $projected;
     }
 
     /**

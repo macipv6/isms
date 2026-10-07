@@ -16,6 +16,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Route;
 
 class RegisterImportController extends Controller
 {
@@ -30,14 +31,14 @@ class RegisterImportController extends Controller
         abort_unless($file !== null, 422);
         $batch = $previewer->preview($project, $request->kind(), $file, $this->actor($request));
 
-        return redirect()->route($this->indexRoute($batch), [$organization, $project, 'batch' => $batch->id]);
+        return $this->redirectToPreview($batch, $organization, $project);
     }
 
     public function show(Request $request, Organization $organization, IsmsProject $project, RegisterImportBatch $batch): JsonResponse|RedirectResponse
     {
         abort_unless($organization->organization_type === 'customer' && $project->organization_id === $organization->id && $batch->project_id === $project->id, 404);
         Gate::authorize('view', $batch);
-        if ($request->header('X-Inertia') !== null) {
+        if ($request->header('X-Inertia') !== null && ($batch->kind->value !== 'protection_needs' || Route::has('protection-needs.index'))) {
             return redirect()->route($this->indexRoute($batch), [$organization, $project, 'batch' => $batch->id]);
         }
         $project->loadMissing('organization');
@@ -84,6 +85,16 @@ class RegisterImportController extends Controller
             'processes' => 'processes.index',
             'assets' => 'assets.index',
             'dependencies' => 'dependencies.index',
+            'protection_needs' => 'protection-needs.index',
         };
+    }
+
+    private function redirectToPreview(RegisterImportBatch $batch, Organization $organization, IsmsProject $project): RedirectResponse
+    {
+        if ($batch->kind->value === 'protection_needs' && ! Route::has('protection-needs.index')) {
+            return redirect()->route('register-imports.show', [$organization, $project, $batch]);
+        }
+
+        return redirect()->route($this->indexRoute($batch), [$organization, $project, 'batch' => $batch->id]);
     }
 }
