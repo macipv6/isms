@@ -41,6 +41,7 @@ class RiskTriggerEvaluator
 
                 return new Collection;
             }
+            $this->restoreNonstandard($project, $target, $recordAudit, $actor);
             $desired = [];
             if (DB::table('protection_needs')->where('project_id', $project->id)->where($column, $target->id)->whereIn('effective_level', ['high', 'very_high'])->exists()) {
                 $desired[RiskTriggerType::ElevatedProtectionNeed->value.':effective'] = [RiskTriggerType::ElevatedProtectionNeed, 'effective', null];
@@ -112,26 +113,41 @@ class RiskTriggerEvaluator
         });
     }
 
-    private function open(IsmsProject $project, DependencyNode $target, RiskTriggerType $type, string $identity, ?string $findingId, ?string $rationale, ?User $actor, bool $recordAudit = true): RiskAnalysisTrigger
+    private function open(IsmsProject $project, DependencyNode $target, RiskTriggerType $type, string $identity, ?string $findingId, ?string $rationale, ?User $actor, bool $recordAudit = true, ?string $creatorId = null): RiskAnalysisTrigger
     {
         $where = ['project_id' => $project->id, $this->targetColumn($target) => $target->id, 'type' => $type->value, 'source_identity' => $identity];
-        $trigger = RiskAnalysisTrigger::query()->where($where)->orderByDesc('created_at')->lockForUpdate()->first();
-        if ($trigger && ! ($trigger->status === RiskTriggerStatus::Superseded && $type === RiskTriggerType::Manual)) {
-            if ($trigger->status === RiskTriggerStatus::Superseded) {
-                $trigger->update(['status' => RiskTriggerStatus::Open]);
-                if ($recordAudit) {
-                    $this->auditStatus($project, $trigger, 'risk_trigger.opened', $actor);
-                }
+        $active = RiskAnalysisTrigger::query()->where($where)->whereIn('status', [RiskTriggerStatus::Open->value, RiskTriggerStatus::Covered->value])->lockForUpdate()->first();
+        if ($active) {
+            return $active;
+        }
+        $historical = RiskAnalysisTrigger::query()->where($where)->where('status', RiskTriggerStatus::Superseded->value)->orderByDesc('created_at')->orderByDesc('id')->lockForUpdate()->first();
+        if ($historical && in_array($type, [RiskTriggerType::ElevatedProtectionNeed, RiskTriggerType::InsufficientBaselineCoverage], true)) {
+            $historical->update(['status' => RiskTriggerStatus::Open]);
+            if ($recordAudit) {
+                $this->auditStatus($project, $historical, 'risk_trigger.opened', $actor);
             }
 
-            return $trigger;
+            return $historical;
         }
-        $trigger = RiskAnalysisTrigger::query()->create([...$where, 'source_finding_id' => $findingId, 'rationale' => $rationale, 'created_by' => $actor?->id, 'status' => RiskTriggerStatus::Open]);
+        $trigger = RiskAnalysisTrigger::query()->create([...$where, 'source_finding_id' => $findingId, 'rationale' => $rationale, 'created_by' => $creatorId ?? $actor?->id, 'status' => RiskTriggerStatus::Open]);
         if ($recordAudit) {
             $this->auditStatus($project, $trigger, 'risk_trigger.opened', $actor);
         }
 
         return $trigger;
+    }
+
+    private function restoreNonstandard(IsmsProject $project, DependencyNode $target, bool $recordAudit, ?User $actor): void
+    {
+        $sources = RiskAnalysisTrigger::query()->where('project_id', $project->id)->where($this->targetColumn($target), $target->id)
+            ->where('type', RiskTriggerType::NonstandardScenario->value)->where('status', RiskTriggerStatus::Superseded->value)
+            ->orderByDesc('created_at')->orderByDesc('id')->get()->unique('source_identity');
+        foreach ($sources as $source) {
+            if (! is_string($source->rationale) || trim($source->rationale) === '' || mb_strlen($source->rationale) > 10000 || ! is_string($source->created_by)) {
+                throw ValidationException::withMessages(['trigger' => 'Der nicht standardisierte Auslöser enthält keine gültige Begründung oder Urheberschaft.']);
+            }
+            $this->open($project, $target, RiskTriggerType::NonstandardScenario, $source->source_identity, null, $source->rationale, $actor, $recordAudit, $source->created_by);
+        }
     }
 
     private function targetColumn(DependencyNode $target): string
