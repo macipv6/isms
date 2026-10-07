@@ -13,6 +13,7 @@ use App\Models\DependencyEdge;
 use App\Models\IsmsProject;
 use App\Models\Organization;
 use App\Models\ProtectionNeed;
+use App\Models\ProtectionNeedDowngradeRequest;
 use App\Models\RegisterImportBatch;
 use App\Models\User;
 use App\Services\Imports\RegisterImportConfirmer;
@@ -172,6 +173,50 @@ class ProtectionNeedImportTest extends TestCase
         $this->assertSame('invalidated', $approval->fresh()->status->value);
     }
 
+    public function test_preview_marks_downgrade_when_only_another_objective_changes_on_an_approved_target(): void
+    {
+        [$project, $actor, $asset, $approval] = $this->approvedDowngradeContext();
+
+        $batch = $this->preview($project, $actor, [
+            'asset,A1,normal,Local,high,New integrity,normal,Spare',
+        ]);
+
+        $this->assertTrue($batch->summary['rows'][0]['requires_downgrade_approval']);
+        $this->assertSame('approved', $approval->fresh()->status->value);
+        $this->assertDatabaseHas('protection_needs', ['asset_id' => $asset->id, 'objective' => 'confidentiality', 'effective_level' => 'normal']);
+
+        app(RegisterImportConfirmer::class)->confirm($batch, $actor);
+
+        $this->assertSame('invalidated', $approval->fresh()->status->value);
+        $this->assertDatabaseHas('protection_needs', ['asset_id' => $asset->id, 'objective' => 'confidentiality', 'direct_level' => 'normal', 'effective_level' => 'high']);
+    }
+
+    public function test_preview_projects_target_wide_invalidation_to_an_earlier_downstream_row(): void
+    {
+        [$project, $actor, $asset, $approval] = $this->approvedDowngradeContext();
+        $downstream = Asset::factory()->for($project, 'project')->create(['key' => 'A2']);
+        DependencyEdge::query()->create(['project_id' => $project->id, 'source_asset_id' => $asset->id, 'target_asset_id' => $downstream->id, 'importance' => 'supporting', 'is_active' => true, 'created_by' => $actor->id]);
+        app(ProtectionNeedService::class)->rateTarget($project, DependencyNode::asset($downstream), [
+            'confidentiality' => ['level' => 'normal', 'rationale' => 'Downstream local'],
+            'integrity' => ['level' => 'normal', 'rationale' => 'Checked'],
+            'availability' => ['level' => 'normal', 'rationale' => 'Spare'],
+        ], $actor, ['confidentiality' => 0, 'integrity' => 0, 'availability' => 0]);
+
+        $batch = $this->preview($project, $actor, [
+            'asset,A2,normal,Downstream local,normal,Checked,normal,Spare',
+            'asset,A1,normal,Local,normal,New integrity rationale,normal,Spare',
+        ]);
+
+        $this->assertTrue($batch->summary['rows'][0]['requires_downgrade_approval']);
+        $this->assertTrue($batch->summary['rows'][1]['requires_downgrade_approval']);
+        $this->assertSame('approved', $approval->fresh()->status->value);
+
+        app(RegisterImportConfirmer::class)->confirm($batch, $actor);
+
+        $this->assertSame('invalidated', $approval->fresh()->status->value);
+        $this->assertDatabaseHas('protection_needs', ['asset_id' => $downstream->id, 'objective' => 'confidentiality', 'direct_level' => 'normal', 'inherited_level' => 'high', 'effective_level' => 'high']);
+    }
+
     public function test_nonexact_headers_and_formula_cells_are_rejected(): void
     {
         [$project, $actor] = $this->context();
@@ -243,6 +288,36 @@ class ProtectionNeedImportTest extends TestCase
         $actor = User::factory()->for(Organization::factory()->state(['organization_type' => 'internal']))->create();
 
         return [$project, $actor];
+    }
+
+    /** @return array{IsmsProject, User, Asset, ProtectionNeedDowngradeRequest} */
+    private function approvedDowngradeContext(): array
+    {
+        [$project, $actor] = $this->context();
+        $second = User::factory()->for(Organization::factory()->state(['organization_type' => 'internal']))->create();
+        $process = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'P1']);
+        $asset = Asset::factory()->for($project, 'project')->create(['key' => 'A1']);
+        DependencyEdge::query()->create(['project_id' => $project->id, 'source_process_id' => $process->id, 'target_asset_id' => $asset->id, 'importance' => 'supporting', 'is_active' => true, 'created_by' => $actor->id]);
+        $service = app(ProtectionNeedService::class);
+        $service->rateTarget($project, DependencyNode::process($process), [
+            'confidentiality' => ['level' => 'high', 'rationale' => 'Source'],
+            'integrity' => ['level' => 'normal', 'rationale' => 'Checked'],
+            'availability' => ['level' => 'normal', 'rationale' => 'Spare'],
+        ], $actor, ['confidentiality' => 0, 'integrity' => 0, 'availability' => 0]);
+        $versions = ProtectionNeed::query()->where('asset_id', $asset->id)->pluck('lock_version', 'objective')->all();
+        $service->rateTarget($project, DependencyNode::asset($asset), [
+            'confidentiality' => ['level' => 'normal', 'rationale' => 'Local'],
+            'integrity' => ['level' => 'normal', 'rationale' => 'Checked'],
+            'availability' => ['level' => 'normal', 'rationale' => 'Spare'],
+        ], $actor, $versions);
+        $need = ProtectionNeed::query()->where('asset_id', $asset->id)->where('objective', 'confidentiality')->firstOrFail();
+        $workflow = app(DowngradeWorkflow::class);
+        $approval = $workflow->request($need, ProtectionLevel::Normal, 'Compensating control', $actor);
+        $workflow->decideInternal($approval, true, 'Reviewed', $second);
+        $versions = ProtectionNeed::query()->where('asset_id', $asset->id)->pluck('lock_version', 'objective')->all();
+        $service->approveTarget($project, DependencyNode::asset($asset), $actor, $versions);
+
+        return [$project, $actor, $asset, $approval];
     }
 
     /** @param list<string> $rows */

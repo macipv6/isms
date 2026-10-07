@@ -119,6 +119,7 @@ class RegisterImportPreviewer
             }
             $current = $needs->get($values['object_type'].':'.$record->id, collect())->keyBy(fn (ProtectionNeed $need): string => $need->objective->value);
             $isNew = $current->isEmpty() || $current->every(fn (ProtectionNeed $need): bool => $need->direct_level === null);
+            $invalidatesTargetApproval = $this->invalidatesTargetApproval($current, $values);
             $category = $isNew ? 'new' : 'unchanged';
             $downgrade = false;
             foreach (['confidentiality', 'integrity', 'availability'] as $objective) {
@@ -131,7 +132,7 @@ class RegisterImportPreviewer
                 if ($inherited && $inherited->rank() > ProtectionLevel::from($values[$objective])->rank()) {
                     $approved = $need?->downgradeRequests->contains(fn ($request): bool => $request->status->value === 'approved' && $request->inherited_level->value === $inherited->value && $request->requested_level->value === $values[$objective]) ?? false;
                     $directChanged = $need?->direct_level?->value !== $values[$objective] || $need?->direct_rationale !== $values[$objective.'_rationale'];
-                    $downgrade = $downgrade || $directChanged || ! $approved || ! $this->sameProjectedSources($need, $projected['sources']);
+                    $downgrade = $downgrade || $directChanged || $invalidatesTargetApproval || ! $approved || ! $this->sameProjectedSources($need, $projected['sources']);
                 }
             }
             $rows[] = ['line' => $row->line, 'category' => $category, 'code' => null, 'values' => $values, 'requires_downgrade_approval' => $downgrade];
@@ -157,11 +158,15 @@ class RegisterImportPreviewer
             $nodes['asset:'.$id] = true;
         }
         $own = [];
+        $invalidatedTargets = [];
         foreach ($parsed->rows as $row) {
             $record = ($row->values['object_type'] === 'process' ? $processes : $assets)->get($row->values['object_key']);
             if ($record && $record->is_active) {
+                $node = $row->values['object_type'].':'.$record->id;
+                $current = $needs->get($node, collect())->keyBy(fn (ProtectionNeed $need): string => $need->objective->value);
+                $invalidatedTargets[$node] = $this->invalidatesTargetApproval($current, $row->values);
                 foreach (['confidentiality', 'integrity', 'availability'] as $objective) {
-                    $own[$row->values['object_type'].':'.$record->id][$objective] = [
+                    $own[$node][$objective] = [
                         'level' => ProtectionLevel::from($row->values[$objective]),
                         'rationale' => $row->values[$objective.'_rationale'],
                     ];
@@ -209,7 +214,7 @@ class RegisterImportPreviewer
                     $projected[$node][$objective] = ['level' => $upstream, 'sources' => $sourceStates];
                 }
                 $changed = array_key_exists($node, $own) && ($need?->direct_level !== $direct || $need?->direct_rationale !== $rationale);
-                $approved = ! $changed && $this->sameProjectedSources($need, $sourceStates)
+                $approved = ! $changed && ! ($invalidatedTargets[$node] ?? false) && $this->sameProjectedSources($need, $sourceStates)
                     && ($need?->downgradeRequests->contains(fn ($request): bool => $request->status->value === 'approved' && $request->inherited_level === $upstream && $request->requested_level === $direct) ?? false);
                 if ($upstream && (! $direct || ($upstream->rank() > $direct->rank() && ! $approved))) {
                     $effective = $upstream;
@@ -257,6 +262,26 @@ class RegisterImportPreviewer
         ])->sortBy('origin')->values()->all();
 
         return $current === $projected;
+    }
+
+    /**
+     * @param  Collection<string, ProtectionNeed>  $current
+     * @param  array<string, string|bool|null>  $values
+     */
+    private function invalidatesTargetApproval(Collection $current, array $values): bool
+    {
+        if (! $current->contains(fn (ProtectionNeed $need): bool => $need->status->value === 'approved')) {
+            return false;
+        }
+
+        foreach (['confidentiality', 'integrity', 'availability'] as $objective) {
+            $need = $current->get($objective);
+            if ($need === null || $need->direct_level?->value !== $values[$objective] || $need->direct_rationale !== $values[$objective.'_rationale']) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
