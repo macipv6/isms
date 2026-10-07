@@ -15,7 +15,11 @@ use App\Services\Threats\ProjectRiskContextService;
 use App\Services\Threats\ProjectThreatService;
 use App\Services\Threats\ThreatCatalogPublisher;
 use App\Services\Threats\ThreatOverviewService;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
@@ -81,6 +85,32 @@ class ProjectThreatWorkflowTest extends TestCase
         }
         $this->expectException(ValidationException::class);
         app(ProjectThreatService::class)->updateCustom($context->projectThreats()->firstOrFail(), $this->payload(), $actor);
+    }
+
+    public function test_migration_down_and_up_preserve_retired_custom_threat_with_reused_code(): void
+    {
+        [$project, $target, $actor] = $this->riskTarget();
+        $service = app(ProjectThreatService::class);
+        $original = $service->createCustom($project, $this->payload(), $actor);
+        app(RiskTriggerEvaluator::class)->register($project, $target, RiskTriggerType::NonstandardScenario, 'Sonderszenario', $actor);
+        $replacement = $service->updateCustom($original, [...$this->payload(), 'title' => 'Korrigiert'], $actor);
+        $this->assertSame($original->code, $replacement->code);
+        $this->assertSame(2, DB::table('project_threats')->where('code', $original->code)->count());
+
+        $migration = require database_path('migrations/2026_09_22_063000_create_risk_trigger_and_threat_review_tables.php');
+        $migration->down();
+        $this->assertFalse(Schema::hasTable('risk_analysis_triggers'));
+        $this->assertDatabaseHas('project_threats', ['id' => $original->id, 'is_active' => false, 'code' => $original->code]);
+        $this->assertDatabaseHas('project_threats', ['id' => $replacement->id, 'is_active' => true, 'code' => $replacement->code]);
+        try {
+            DB::transaction(fn () => DB::table('project_threats')->insert([...$replacement->getAttributes(), 'id' => (string) Str::uuid()]));
+            $this->fail('A second active custom threat with the same code was accepted.');
+        } catch (QueryException) {
+            $this->assertSame(2, DB::table('project_threats')->where('code', $original->code)->count());
+        }
+        $migration->up();
+        $this->assertTrue(Schema::hasTable('risk_analysis_triggers'));
+        $this->assertSame(2, DB::table('project_threats')->where('code', $original->code)->count());
     }
 
     private function payload(): array

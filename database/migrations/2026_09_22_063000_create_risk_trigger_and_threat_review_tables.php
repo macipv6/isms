@@ -30,10 +30,8 @@ return new class extends Migration
             $table->unique(['finding_id', 'asset_id']);
         });
         DB::statement('ALTER TABLE project_threats ADD CONSTRAINT project_threats_id_project_unique UNIQUE (id, project_id)');
-        Schema::table('project_threats', function (Blueprint $table): void {
-            $table->dropUnique('project_threats_project_id_catalog_version_id_code_unique');
-        });
-        DB::statement('CREATE UNIQUE INDEX project_threats_active_code_unique ON project_threats (project_id, catalog_version_id, code) WHERE is_active = true');
+        DB::statement('ALTER TABLE project_threats DROP CONSTRAINT IF EXISTS project_threats_project_id_catalog_version_id_code_unique');
+        DB::statement('CREATE UNIQUE INDEX IF NOT EXISTS project_threats_active_code_unique ON project_threats (project_id, catalog_version_id, code) WHERE is_active = true');
         Schema::create('risk_analysis_triggers', function (Blueprint $table): void {
             $table->uuid('id')->primary();
             $table->uuid('project_id');
@@ -85,10 +83,17 @@ return new class extends Migration
     {
         Schema::dropIfExists('risk_target_threat_reviews');
         Schema::dropIfExists('risk_analysis_triggers');
-        DB::statement('DROP INDEX IF EXISTS project_threats_active_code_unique');
-        Schema::table('project_threats', function (Blueprint $table): void {
-            $table->unique(['project_id', 'catalog_version_id', 'code']);
-        });
+        // Retired replacements can share their stable code with the active row.
+        // Keep the active-only index when restoring the old constraint would discard or reject history.
+        $hasHistoricalDuplicates = DB::table('project_threats')
+            ->selectRaw('1')
+            ->groupBy('project_id', 'catalog_version_id', 'code')
+            ->havingRaw('count(*) > 1')
+            ->first() !== null;
+        if (! $hasHistoricalDuplicates) {
+            DB::statement('DROP INDEX IF EXISTS project_threats_active_code_unique');
+            DB::statement('ALTER TABLE project_threats ADD CONSTRAINT project_threats_project_id_catalog_version_id_code_unique UNIQUE (project_id, catalog_version_id, code)');
+        }
         DB::statement('ALTER TABLE project_threats DROP CONSTRAINT IF EXISTS project_threats_id_project_unique');
         Schema::dropIfExists('finding_asset_links');
         Schema::dropIfExists('finding_process_links');

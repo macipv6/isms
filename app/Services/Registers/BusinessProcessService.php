@@ -103,6 +103,7 @@ class BusinessProcessService
             if (! $deferRecalculation) {
                 $this->propagator->recalculate($project, [], $actor);
             }
+            $this->invalidator->refreshRiskTarget(DependencyNode::process($locked), $audit, $actor);
             if ($audit) {
                 $this->audit->record('business_process.status_changed', $actor, ['project_id' => $project->id, 'business_process_id' => $locked->id, 'key' => $locked->key, 'old_active' => $old ? 'true' : 'false', 'new_active' => $active ? 'true' : 'false'], $project->organization_id);
             }

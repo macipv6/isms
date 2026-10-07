@@ -6,6 +6,8 @@ use App\Data\Dependencies\DependencyNode;
 use App\Enums\DependencyNodeType;
 use App\Enums\RiskTriggerStatus;
 use App\Enums\RiskTriggerType;
+use App\Models\Asset;
+use App\Models\BusinessProcess;
 use App\Models\IsmsProject;
 use App\Models\RiskAnalysisTrigger;
 use App\Models\User;
@@ -25,8 +27,20 @@ class RiskTriggerEvaluator
     {
         return DB::transaction(function () use ($project, $target, $recordAudit, $actor): Collection {
             $project = $this->access->project($project);
-            $this->access->target($project, $target);
+            $this->access->target($project, $target, false);
             $column = $this->targetColumn($target);
+            $targetModel = $target->type === DependencyNodeType::Process ? BusinessProcess::class : Asset::class;
+            if (! $targetModel::query()->whereKey($target->id)->where('project_id', $project->id)->where('is_active', true)->exists()) {
+                $open = RiskAnalysisTrigger::query()->where('project_id', $project->id)->where($column, $target->id)->whereIn('status', [RiskTriggerStatus::Open->value, RiskTriggerStatus::Covered->value])->lockForUpdate()->get();
+                foreach ($open as $trigger) {
+                    $trigger->update(['status' => RiskTriggerStatus::Superseded]);
+                    if ($recordAudit) {
+                        $this->auditStatus($project, $trigger, 'risk_trigger.superseded', $actor);
+                    }
+                }
+
+                return new Collection;
+            }
             $desired = [];
             if (DB::table('protection_needs')->where('project_id', $project->id)->where($column, $target->id)->whereIn('effective_level', ['high', 'very_high'])->exists()) {
                 $desired[RiskTriggerType::ElevatedProtectionNeed->value.':effective'] = [RiskTriggerType::ElevatedProtectionNeed, 'effective', null];

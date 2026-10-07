@@ -105,6 +105,7 @@ class AssetService
             if (! $deferRecalculation) {
                 $this->propagator->recalculate($project, [], $actor);
             }
+            $this->invalidator->refreshRiskTarget(DependencyNode::asset($locked), $audit, $actor);
             if ($audit) {
                 $this->audit->record('asset.status_changed', $actor, ['project_id' => $project->id, 'asset_id' => $locked->id, 'key' => $locked->key, 'old_active' => $old ? 'true' : 'false', 'new_active' => $active ? 'true' : 'false'], $project->organization_id);
             }
