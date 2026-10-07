@@ -195,14 +195,17 @@ class RiskMethodologySchemaTest extends TestCase
 
     public function test_migration_can_be_rolled_back_and_reapplied(): void
     {
+        $triggerMigration = require database_path('migrations/2026_09_22_063000_create_risk_trigger_and_threat_review_tables.php');
         $dependentMigration = require database_path('migrations/2026_09_22_061000_create_threat_catalog_and_risk_context_tables.php');
         $migration = require database_path('migrations/2026_09_22_060000_create_risk_methodology_tables.php');
+        $triggerMigration->down();
         $dependentMigration->down();
         $migration->down();
         $this->assertFalse(Schema::hasTable('risk_methodologies'));
         $this->assertFalse(Schema::hasTable('risk_matrix_cells'));
         $migration->up();
         $dependentMigration->up();
+        $triggerMigration->up();
         $this->assertTrue(Schema::hasTable('risk_methodology_versions'));
         $this->assertTrue(Schema::hasTable('risk_matrix_cells'));
     }

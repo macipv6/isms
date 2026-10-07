@@ -4,13 +4,20 @@ namespace App\Services\ProtectionNeeds;
 
 use App\Data\Dependencies\DependencyNode;
 use App\Enums\DependencyNodeType;
+use App\Models\IsmsProject;
 use App\Models\ProtectionNeed;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
+use App\Services\Risks\RiskTriggerEvaluator;
 
 class ProtectionNeedInvalidator
 {
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(private readonly AuditLogger $audit, private readonly RiskTriggerEvaluator $triggers) {}
+
+    public function refreshRiskTarget(DependencyNode $target, bool $recordAudit = true, ?User $actor = null): void
+    {
+        $this->triggers->refreshTarget(IsmsProject::query()->findOrFail($target->projectId), $target, $recordAudit, $actor);
+    }
 
     public function invalidate(ProtectionNeed $need, ?User $actor = null, bool $recordAudit = true): bool
     {

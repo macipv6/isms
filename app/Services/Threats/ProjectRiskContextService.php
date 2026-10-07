@@ -17,7 +17,7 @@ use Illuminate\Validation\ValidationException;
 
 class ProjectRiskContextService
 {
-    public function __construct(private readonly AuditLogger $audit, private readonly ProtectionNeedPropagator $propagator) {}
+    public function __construct(private readonly AuditLogger $audit, private readonly ProtectionNeedPropagator $propagator, private readonly ThreatOverviewService $overview) {}
 
     public function initialize(IsmsProject $project, RiskMethodologyVersion $methodology, ThreatCatalogVersion $catalog, User $actor): ProjectRiskContext
     {
@@ -44,6 +44,7 @@ class ProjectRiskContextService
             ]);
             $this->copyCatalog($context, $catalog, $actor);
             $this->propagator->recalculate($project, [], $actor);
+            $this->ensureThreatReviews($context, $catalog, $project);
             $this->recordChange($context, 'initialized', null, $methodology, null, $catalog, $actor);
             $this->audit->record('risk_context.initialized', $actor, [
                 'project_id' => $project->id,
@@ -78,6 +79,9 @@ class ProjectRiskContextService
             }
             $context->update(['methodology_version_id' => $methodology->id, 'catalog_version_id' => $catalog->id]);
             $this->propagator->recalculate($project, [], $actor);
+            if ($oldCatalog->id !== $catalog->id) {
+                $this->ensureThreatReviews($context, $catalog, $project);
+            }
             $this->recordChange($context, 'migrated', $oldMethodology, $methodology, $oldCatalog, $catalog, $actor);
             $this->audit->record('risk_context.migrated', $actor, [
                 'project_id' => $project->id,
@@ -164,5 +168,12 @@ class ProjectRiskContextService
             'actor_user_id' => $actor->id,
             'changed_at' => now(),
         ]);
+    }
+
+    private function ensureThreatReviews(ProjectRiskContext $context, ThreatCatalogVersion $catalog, IsmsProject $project): void
+    {
+        foreach ($context->projectThreats()->where('catalog_version_id', $catalog->id)->pluck('id') as $threatId) {
+            $this->overview->ensureForThreat($project, $threatId);
+        }
     }
 }

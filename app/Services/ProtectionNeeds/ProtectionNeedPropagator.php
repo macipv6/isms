@@ -98,6 +98,7 @@ class ProtectionNeedPropagator
             }
             $incoming = [];
             $changed = new Collection;
+            $effectiveTargets = [];
             foreach ($order as $id) {
                 $node = $nodes[$id];
                 foreach (ProtectionObjective::cases() as $objective) {
@@ -149,6 +150,9 @@ class ProtectionNeedPropagator
                     }
                     $effectiveChanged = $oldEffective !== $effective;
                     if (isset($affected[$id]) && ($sourceChanged || $inheritedChanged || $effectiveChanged)) {
+                        if ($effectiveChanged) {
+                            $effectiveTargets[$id] = $node;
+                        }
                         $need->inherited_level = $max;
                         $need->effective_level = $effective;
                         if (! $invalidated) {
@@ -188,6 +192,9 @@ class ProtectionNeedPropagator
                         }
                     }
                 }
+            }
+            foreach ($effectiveTargets as $target) {
+                $this->invalidator->refreshRiskTarget($target, $recordAudit, $actor);
             }
 
             return $changed;

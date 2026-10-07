@@ -2,6 +2,7 @@
 
 namespace App\Services\Findings;
 
+use App\Data\Dependencies\DependencyNode;
 use App\Enums\AssessmentStatus;
 use App\Enums\ComplianceStatus;
 use App\Enums\FindingSeverity;
@@ -10,6 +11,8 @@ use App\Enums\MeasureStatus;
 use App\Enums\ProjectStatus;
 use App\Enums\UserRole;
 use App\Models\AssessmentQuestion;
+use App\Models\Asset;
+use App\Models\BusinessProcess;
 use App\Models\Finding;
 use App\Models\IsmsProject;
 use App\Models\Measure;
@@ -18,6 +21,7 @@ use App\Models\ProjectAssessment;
 use App\Models\User;
 use App\Services\Assessment\ApplicabilityEvaluator;
 use App\Services\Audit\AuditLogger;
+use App\Services\Risks\RiskTriggerEvaluator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -28,6 +32,7 @@ class FindingWorkflow
     public function __construct(
         private readonly ApplicabilityEvaluator $applicability,
         private readonly AuditLogger $audit,
+        private readonly RiskTriggerEvaluator $triggers,
     ) {}
 
     /** @param array<string, mixed> $data */
@@ -131,6 +136,7 @@ class FindingWorkflow
                 'old_status' => $oldStatus->value,
                 'new_status' => $decision->value,
             ], $project->organization_id);
+            $this->refreshLinkedTargets($project, $locked, $actor);
 
             return $locked;
         });
@@ -164,6 +170,7 @@ class FindingWorkflow
                 'old_status' => $oldStatus->value,
                 'new_status' => FindingStatus::Closed->value,
             ], $project->organization_id);
+            $this->refreshLinkedTargets($project, $locked, $actor);
 
             return $locked;
         });
@@ -227,10 +234,11 @@ class FindingWorkflow
 
     private function lockedWritableProject(IsmsProject $project, User $actor): IsmsProject
     {
-        $actor->loadMissing('organization');
-        if (! $actor->is_active
-            || $actor->organization?->organization_type !== 'internal'
-            || ! in_array($actor->role, [UserRole::Admin, UserRole::Consultant], true)) {
+        $current = User::query()->with('organization')->lockForUpdate()->find($actor->id);
+        if (! $current?->is_active
+            || ! $current->organization?->is_active
+            || $current->organization->organization_type !== 'internal'
+            || ! in_array($current->role, [UserRole::Admin, UserRole::Consultant], true)) {
             $this->reject('Die Aktion ist nicht zulässig.');
         }
 
@@ -262,5 +270,17 @@ class FindingWorkflow
     private function reject(string $message): never
     {
         throw ValidationException::withMessages(['finding' => $message]);
+    }
+
+    private function refreshLinkedTargets(IsmsProject $project, Finding $finding, User $actor): void
+    {
+        $processIds = DB::table('finding_process_links')->where('project_id', $project->id)->where('finding_id', $finding->id)->pluck('business_process_id');
+        foreach (BusinessProcess::query()->where('project_id', $project->id)->whereIn('id', $processIds)->get() as $process) {
+            $this->triggers->refreshTarget($project, DependencyNode::process($process), true, $actor);
+        }
+        $assetIds = DB::table('finding_asset_links')->where('project_id', $project->id)->where('finding_id', $finding->id)->pluck('asset_id');
+        foreach (Asset::query()->where('project_id', $project->id)->whereIn('id', $assetIds)->get() as $asset) {
+            $this->triggers->refreshTarget($project, DependencyNode::asset($asset), true, $actor);
+        }
     }
 }
