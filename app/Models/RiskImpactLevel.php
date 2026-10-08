@@ -6,7 +6,9 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/** @property string $key */
+/** @property string $key
+ * @property int $sort_order
+ */
 class RiskImpactLevel extends Model
 {
     use HasUuids;

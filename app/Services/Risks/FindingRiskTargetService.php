@@ -16,7 +16,7 @@ use Illuminate\Validation\ValidationException;
 
 class FindingRiskTargetService
 {
-    public function __construct(private readonly ProtectionNeedAccess $access, private readonly RiskTriggerEvaluator $evaluator, private readonly AuditLogger $audit) {}
+    public function __construct(private readonly ProtectionNeedAccess $access, private readonly RiskTriggerEvaluator $evaluator, private readonly AuditLogger $audit, private readonly RiskChangeInvalidator $invalidator) {}
 
     public function link(Finding $finding, DependencyNode $target, User $actor): void
     {
@@ -35,6 +35,7 @@ class FindingRiskTargetService
             }
             if ($link->wasRecentlyCreated) {
                 $this->audit->record('finding.target_linked', $actor, ['project_id' => $project->id, 'finding_id' => $finding->id, 'target_id' => $target->id, 'target_type' => $target->type->value], $project->organization_id);
+                $this->invalidator->invalidateForTarget($project, $target, 'finding_link', $actor);
             }
             $this->evaluator->refreshTarget($project, $target, true, $actor);
         });

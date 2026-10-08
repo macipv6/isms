@@ -50,6 +50,10 @@ class AuditLogger
         'new_level',
         'old_level',
         'decision_channel',
+        'decision_id',
+        'decision_maker_id',
+        'recorder_id',
+        'action',
     ];
 
     /**

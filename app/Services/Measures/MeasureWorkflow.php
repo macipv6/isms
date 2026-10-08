@@ -12,6 +12,7 @@ use App\Models\IsmsProject;
 use App\Models\Measure;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
+use App\Services\Risks\RiskChangeInvalidator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -28,7 +29,7 @@ class MeasureWorkflow
         'cancelled' => [],
     ];
 
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(private readonly AuditLogger $audit, private readonly RiskChangeInvalidator $risks) {}
 
     /** @param array<string, mixed> $data */
     public function create(Finding $finding, array $data, User $actor): Measure
@@ -88,6 +89,7 @@ class MeasureWorkflow
                 'measure_id' => $locked->id,
                 'changed_fields' => $changedFields,
             ], $project->organization_id);
+            $this->risks->invalidateForLinkedResource($project, 'measure', $locked->id, $actor);
 
             return $locked;
         });
@@ -119,6 +121,7 @@ class MeasureWorkflow
                 'old_status' => $oldStatus->value,
                 'new_status' => $target->value,
             ], $project->organization_id);
+            $this->risks->invalidateForLinkedResource($project, 'measure', $locked->id, $actor);
 
             return $locked;
         });

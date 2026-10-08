@@ -21,6 +21,7 @@ use App\Models\ProjectAssessment;
 use App\Models\User;
 use App\Services\Assessment\ApplicabilityEvaluator;
 use App\Services\Audit\AuditLogger;
+use App\Services\Risks\RiskChangeInvalidator;
 use App\Services\Risks\RiskTriggerEvaluator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -33,6 +34,7 @@ class FindingWorkflow
         private readonly ApplicabilityEvaluator $applicability,
         private readonly AuditLogger $audit,
         private readonly RiskTriggerEvaluator $triggers,
+        private readonly RiskChangeInvalidator $risks,
     ) {}
 
     /** @param array<string, mixed> $data */
@@ -99,6 +101,7 @@ class FindingWorkflow
                 'finding_id' => $locked->id,
                 'changed_fields' => $changedFields,
             ], $project->organization_id);
+            $this->risks->invalidateForLinkedResource($project, 'finding', $locked->id, $actor);
 
             return $locked;
         });
@@ -136,6 +139,7 @@ class FindingWorkflow
                 'old_status' => $oldStatus->value,
                 'new_status' => $decision->value,
             ], $project->organization_id);
+            $this->risks->invalidateForLinkedResource($project, 'finding', $locked->id, $actor);
             $this->refreshLinkedTargets($project, $locked, $actor);
 
             return $locked;
@@ -170,6 +174,7 @@ class FindingWorkflow
                 'old_status' => $oldStatus->value,
                 'new_status' => FindingStatus::Closed->value,
             ], $project->organization_id);
+            $this->risks->invalidateForLinkedResource($project, 'finding', $locked->id, $actor);
             $this->refreshLinkedTargets($project, $locked, $actor);
 
             return $locked;

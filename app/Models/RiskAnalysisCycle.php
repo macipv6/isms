@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /** @property RiskCycleStatus $status */
 class RiskAnalysisCycle extends Model
@@ -36,5 +37,35 @@ class RiskAnalysisCycle extends Model
     public function triggerLinks(): HasMany
     {
         return $this->hasMany(RiskAnalysisTriggerLink::class, 'risk_analysis_cycle_id');
+    }
+
+    /** @return HasOne<RiskTreatment, $this> */
+    public function treatment(): HasOne
+    {
+        return $this->hasOne(RiskTreatment::class, 'risk_analysis_cycle_id');
+    }
+
+    /** @return HasMany<RiskAnalysisFindingLink, $this> */
+    public function findingLinks(): HasMany
+    {
+        return $this->hasMany(RiskAnalysisFindingLink::class, 'risk_analysis_cycle_id');
+    }
+
+    /** @return HasMany<RiskAnalysisMeasureLink, $this> */
+    public function measureLinks(): HasMany
+    {
+        return $this->hasMany(RiskAnalysisMeasureLink::class, 'risk_analysis_cycle_id');
+    }
+
+    /** @return HasMany<RiskAnalysisEvidenceLink, $this> */
+    public function evidenceLinks(): HasMany
+    {
+        return $this->hasMany(RiskAnalysisEvidenceLink::class, 'risk_analysis_cycle_id');
+    }
+
+    /** @return HasMany<RiskDecision, $this> */
+    public function decisions(): HasMany
+    {
+        return $this->hasMany(RiskDecision::class, 'risk_analysis_cycle_id');
     }
 }
