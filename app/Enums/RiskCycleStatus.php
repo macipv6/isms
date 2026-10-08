@@ -10,4 +10,5 @@ enum RiskCycleStatus: string
     case ResidualAssessed = 'residual_assessed';
     case AwaitingDecision = 'awaiting_decision';
     case Completed = 'completed';
+    case Superseded = 'superseded';
 }

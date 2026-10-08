@@ -53,7 +53,8 @@ return new class extends Migration
             $table->unique(['id', 'project_id']);
             $table->unique(['risk_analysis_id', 'cycle_number']);
         });
-        DB::statement("ALTER TABLE risk_analysis_cycles ADD CONSTRAINT risk_cycle_status_check CHECK (status IN ('draft','inherent_assessed','treatment_in_progress','residual_assessed','awaiting_decision','completed'))");
+        DB::statement("ALTER TABLE risk_analysis_cycles ADD CONSTRAINT risk_cycle_status_check CHECK (status IN ('draft','inherent_assessed','treatment_in_progress','residual_assessed','awaiting_decision','completed','superseded'))");
+        DB::statement("ALTER TABLE risk_analysis_cycles ADD CONSTRAINT risk_cycle_superseded_check CHECK (status <> 'superseded' OR (needs_review AND NOT is_current))");
         DB::statement('ALTER TABLE risk_analysis_cycles ADD CONSTRAINT risk_cycle_positive_number CHECK (cycle_number > 0)');
         DB::statement('ALTER TABLE risk_analysis_cycles ADD CONSTRAINT risk_cycle_objectives_check CHECK (confidentiality OR integrity OR availability)');
         DB::statement('CREATE UNIQUE INDEX risk_cycle_one_open_current ON risk_analysis_cycles (risk_analysis_id) WHERE is_current = true AND status <> \'completed\'');
@@ -84,10 +85,10 @@ SQL);
         DB::unprepared(<<<'SQL'
 CREATE OR REPLACE FUNCTION protect_completed_risk_cycle() RETURNS trigger AS $$
 BEGIN
-    IF TG_OP = 'DELETE' AND OLD.status = 'completed' THEN
+    IF TG_OP = 'DELETE' AND OLD.status IN ('completed', 'superseded') THEN
         RAISE EXCEPTION 'Completed risk cycle is immutable';
     END IF;
-    IF TG_OP = 'UPDATE' AND OLD.status = 'completed' THEN
+    IF TG_OP = 'UPDATE' AND OLD.status IN ('completed', 'superseded') THEN
         IF NEW.id <> OLD.id OR NEW.project_id <> OLD.project_id OR NEW.risk_analysis_id <> OLD.risk_analysis_id OR NEW.cycle_number <> OLD.cycle_number
            OR NEW.title <> OLD.title OR NEW.cause <> OLD.cause OR NEW.event <> OLD.event OR NEW.impact <> OLD.impact
            OR NEW.confidentiality <> OLD.confidentiality OR NEW.integrity <> OLD.integrity OR NEW.availability <> OLD.availability
@@ -129,8 +130,14 @@ SQL);
 CREATE OR REPLACE FUNCTION protect_completed_risk_child() RETURNS trigger AS $$
 DECLARE cycle_status text;
 BEGIN
-    SELECT status INTO cycle_status FROM risk_analysis_cycles WHERE id = COALESCE(NEW.risk_analysis_cycle_id, OLD.risk_analysis_cycle_id);
-    IF cycle_status = 'completed' THEN RAISE EXCEPTION 'Completed risk cycle children are immutable'; END IF;
+    IF TG_OP IN ('UPDATE', 'DELETE') THEN
+        SELECT status INTO cycle_status FROM risk_analysis_cycles WHERE id = OLD.risk_analysis_cycle_id;
+        IF cycle_status IN ('completed', 'superseded') THEN RAISE EXCEPTION 'Historical risk cycle children are immutable'; END IF;
+    END IF;
+    IF TG_OP IN ('INSERT', 'UPDATE') THEN
+        SELECT status INTO cycle_status FROM risk_analysis_cycles WHERE id = NEW.risk_analysis_cycle_id;
+        IF cycle_status IN ('completed', 'superseded') THEN RAISE EXCEPTION 'Historical risk cycle children are immutable'; END IF;
+    END IF;
     IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
     RETURN NEW;
 END;

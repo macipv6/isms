@@ -71,8 +71,8 @@ class RiskAnalysisWorkflow
             $target = $this->target($analysis);
             $this->access->target($project, $target);
             $prior = $analysis->cycles()->orderByDesc('cycle_number')->lockForUpdate()->firstOrFail();
-            if ($prior->status !== RiskCycleStatus::Completed) {
-                throw ValidationException::withMessages(['cycle' => 'Ein neuer Zyklus erfordert einen abgeschlossenen Vorgänger.']);
+            if ($prior->status !== RiskCycleStatus::Completed && ($prior->status !== RiskCycleStatus::Superseded || ! $prior->needs_review || $prior->is_current)) {
+                throw ValidationException::withMessages(['cycle' => 'Ein neuer Zyklus erfordert einen abgeschlossenen oder ungültig gewordenen Vorgänger.']);
             }
             $currentCatalog = DB::table('project_risk_contexts')->where('project_id', $project->id)->value('catalog_version_id');
             $threat = ProjectThreat::query()->whereKey($analysis->project_threat_id)->where('project_id', $project->id)->where('is_active', true)
@@ -88,6 +88,19 @@ class RiskAnalysisWorkflow
                 'confidentiality' => $prior->confidentiality, 'integrity' => $prior->integrity, 'availability' => $prior->availability,
                 'status' => RiskCycleStatus::Draft, 'is_current' => true, 'needs_review' => false, 'lock_version' => 0, 'created_by' => $actor->id, 'updated_by' => $actor->id,
             ]);
+            $column = $this->targetColumn($target);
+            $currentTriggerIds = DB::table('risk_analysis_trigger_links as links')
+                ->join('risk_analysis_triggers as triggers', function ($join): void {
+                    $join->on('triggers.id', '=', 'links.risk_analysis_trigger_id')->on('triggers.project_id', '=', 'links.project_id');
+                })
+                ->where('links.project_id', $project->id)
+                ->where('links.risk_analysis_cycle_id', $prior->id)
+                ->where('triggers.'.$column, $target->id)
+                ->whereIn('triggers.status', ['open', 'covered'])
+                ->pluck('triggers.id');
+            foreach ($currentTriggerIds as $triggerId) {
+                $cycle->triggerLinks()->create(['project_id' => $project->id, 'risk_analysis_trigger_id' => $triggerId]);
+            }
             $this->audit->record('risk_analysis.cycle_started', $actor, ['project_id' => $project->id, 'source_id' => $prior->id, 'target_id' => $cycle->id], $project->organization_id);
 
             return $cycle;
@@ -107,6 +120,11 @@ class RiskAnalysisWorkflow
             'confidentiality' => ['required', 'boolean'],
             'integrity' => ['required', 'boolean'],
             'availability' => ['required', 'boolean'],
+        ], [
+            'required' => 'Dieses Feld ist erforderlich.',
+            'string' => 'Dieses Feld muss Text enthalten.',
+            'max' => 'Dieses Feld ist zu lang.',
+            'boolean' => 'Dieses Schutzziel muss wahr oder falsch sein.',
         ])->validate();
         foreach (['title', 'cause', 'event', 'impact'] as $field) {
             $fields[$field] = trim((string) $fields[$field]);

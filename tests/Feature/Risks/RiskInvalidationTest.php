@@ -135,6 +135,24 @@ class RiskInvalidationTest extends TestCase
         $this->assertSame(2, app(RiskAnalysisWorkflow::class)->startNextCycle($cycle->analysis, $actor)->cycle_number);
     }
 
+    public function test_covered_trigger_stays_covered_until_its_last_current_completed_cycle_is_stale(): void
+    {
+        [$project, $target, $actor, $context] = $this->riskTarget();
+        $trigger = app(RiskTriggerEvaluator::class)->register($project, $target, RiskTriggerType::NonstandardScenario, 'Mehrfachdeckung', $actor);
+        $threats = $context->projectThreats()->take(2)->get();
+        $first = app(RiskAnalysisWorkflow::class)->create($project, $target, $threats[0], $this->scenario(), [$trigger->id], $actor);
+        $second = app(RiskAnalysisWorkflow::class)->create($project, $target, $threats[1], $this->scenario(), [$trigger->id], $actor);
+        foreach ([$first, $second] as $cycle) {
+            $cycle->update(['status' => 'completed', 'completed_by' => $actor->id, 'completed_at' => now()]);
+        }
+        $trigger->update(['status' => 'covered']);
+        $invalidator = app(RiskChangeInvalidator::class);
+        $invalidator->invalidateForThreat($project, $threats[0]->id, 'threat_replacement', $actor);
+        $this->assertSame('covered', $trigger->fresh()->status->value);
+        $invalidator->invalidateForThreat($project, $threats[1]->id, 'threat_replacement', $actor);
+        $this->assertSame('open', $trigger->fresh()->status->value);
+    }
+
     private function scenario(): array
     {
         return ['title' => 'Ausfall', 'cause' => 'Defekt', 'event' => 'Stillstand', 'impact' => 'Lieferverzug', 'availability' => true, 'integrity' => false, 'confidentiality' => false];

@@ -4,6 +4,7 @@ namespace App\Services\Risks;
 
 use App\Data\Dependencies\DependencyNode;
 use App\Enums\DependencyNodeType;
+use App\Enums\RiskCycleStatus;
 use App\Models\IsmsProject;
 use App\Models\RiskAnalysis;
 use App\Models\RiskAnalysisCycle;
@@ -51,15 +52,30 @@ class RiskChangeInvalidator
     {
         $cycles = RiskAnalysisCycle::query()->where('risk_analysis_id', $analysis->id)->where('is_current', true)->where('needs_review', false)->lockForUpdate()->get();
         foreach ($cycles as $cycle) {
-            $cycle->update(['needs_review' => true]);
+            $completed = $cycle->status === RiskCycleStatus::Completed;
+            $cycle->update($completed
+                ? ['needs_review' => true]
+                : ['needs_review' => true, 'is_current' => false, 'status' => RiskCycleStatus::Superseded, 'lock_version' => $cycle->lock_version + 1, 'updated_by' => $actor === null ? $cycle->updated_by : $actor->id]);
             foreach ($cycle->triggerLinks()->pluck('risk_analysis_trigger_id') as $triggerId) {
-                RiskAnalysisTrigger::query()->whereKey($triggerId)->where('project_id', $project->id)->where('status', 'covered')->update(['status' => 'open']);
+                $stillCovered = DB::table('risk_analysis_trigger_links as links')
+                    ->join('risk_analysis_cycles as cycles', function ($join): void {
+                        $join->on('cycles.id', '=', 'links.risk_analysis_cycle_id')->on('cycles.project_id', '=', 'links.project_id');
+                    })
+                    ->where('links.project_id', $project->id)
+                    ->where('links.risk_analysis_trigger_id', $triggerId)
+                    ->where('cycles.is_current', true)
+                    ->where('cycles.needs_review', false)
+                    ->where('cycles.status', 'completed')
+                    ->exists();
+                if (! $stillCovered) {
+                    RiskAnalysisTrigger::query()->whereKey($triggerId)->where('project_id', $project->id)->where('status', 'covered')->update(['status' => 'open']);
+                }
             }
             $this->audit->record('risk_analysis.invalidated', $actor, [
                 'project_id' => $project->id,
                 'target_id' => $cycle->id,
                 'reason' => in_array($reason, ['protection_need', 'provenance', 'topology', 'lifecycle', 'methodology', 'catalog', 'threat_replacement'], true) ? $reason : 'related_change',
-                'new_status' => 'needs_review',
+                'new_status' => $completed ? 'needs_review' : RiskCycleStatus::Superseded->value,
             ], $project->organization_id);
         }
     }

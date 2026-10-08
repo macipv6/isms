@@ -10,6 +10,7 @@ use App\Models\IsmsProject;
 use App\Models\Organization;
 use App\Services\Risks\RiskAnalysisWorkflow;
 use App\Services\Risks\RiskAssessmentService;
+use App\Services\Risks\RiskChangeInvalidator;
 use App\Services\Risks\RiskTriggerEvaluator;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -101,5 +102,58 @@ class RiskAnalysisSchemaTest extends TestCase
         }
         $this->expectException(QueryException::class);
         DB::table('risk_analysis_trigger_links')->insert(['id' => (string) Str::uuid(), 'project_id' => $project->id, 'risk_analysis_cycle_id' => $cycle->id, 'risk_analysis_trigger_id' => $foreignTrigger->id, 'created_at' => now(), 'updated_at' => now()]);
+    }
+
+    public function test_completed_assessment_cannot_be_reparented_to_open_cycle(): void
+    {
+        [$project, $target, $actor, $context] = $this->riskTarget();
+        $workflow = app(RiskAnalysisWorkflow::class);
+        $threat = $context->projectThreats()->firstOrFail();
+        $completed = $workflow->create($project, $target, $threat, ['title' => 'Erstes Szenario', 'cause' => 'Defekt', 'event' => 'Stillstand', 'impact' => 'Lieferverzug', 'availability' => true, 'integrity' => false, 'confidentiality' => false], [], $actor);
+        $assessment = app(RiskAssessmentService::class)->assessInherent($completed, 'frequent', 'considerable', 'Bewertung', $actor, 0);
+        $completed->update(['status' => 'completed', 'completed_by' => $actor->id, 'completed_at' => now()]);
+        $open = $workflow->create($project, $target, $threat, ['title' => 'Zweites Szenario', 'cause' => 'Defekt', 'event' => 'Stillstand', 'impact' => 'Lieferverzug', 'availability' => true, 'integrity' => false, 'confidentiality' => false], [], $actor);
+        $this->expectException(QueryException::class);
+        DB::table('risk_assessments')->where('id', $assessment->id)->update(['risk_analysis_cycle_id' => $open->id]);
+    }
+
+    public function test_completed_trigger_link_cannot_be_reparented_to_open_cycle(): void
+    {
+        [$project, $target, $actor, $context] = $this->riskTarget();
+        $trigger = app(RiskTriggerEvaluator::class)->register($project, $target, RiskTriggerType::Manual, 'Hinweis', $actor);
+        $workflow = app(RiskAnalysisWorkflow::class);
+        $threat = $context->projectThreats()->firstOrFail();
+        $completed = $workflow->create($project, $target, $threat, ['title' => 'Erstes Szenario', 'cause' => 'Defekt', 'event' => 'Stillstand', 'impact' => 'Lieferverzug', 'availability' => true, 'integrity' => false, 'confidentiality' => false], [$trigger->id], $actor);
+        $completed->update(['status' => 'completed', 'completed_by' => $actor->id, 'completed_at' => now()]);
+        $open = $workflow->create($project, $target, $threat, ['title' => 'Zweites Szenario', 'cause' => 'Defekt', 'event' => 'Stillstand', 'impact' => 'Lieferverzug', 'availability' => true, 'integrity' => false, 'confidentiality' => false], [], $actor);
+        $this->expectException(QueryException::class);
+        DB::table('risk_analysis_trigger_links')->where('risk_analysis_cycle_id', $completed->id)->update(['risk_analysis_cycle_id' => $open->id]);
+    }
+
+    public function test_superseded_cycle_cannot_remain_current(): void
+    {
+        [$project, $target, $actor, $context] = $this->riskTarget();
+        $cycle = app(RiskAnalysisWorkflow::class)->create($project, $target, $context->projectThreats()->firstOrFail(), ['title' => 'Ausfall', 'cause' => 'Defekt', 'event' => 'Stillstand', 'impact' => 'Lieferverzug', 'availability' => true, 'integrity' => false, 'confidentiality' => false], [], $actor);
+        $this->expectException(QueryException::class);
+        DB::table('risk_analysis_cycles')->where('id', $cycle->id)->update(['status' => 'superseded', 'needs_review' => true]);
+    }
+
+    public function test_superseded_cycle_history_is_database_immutable(): void
+    {
+        [$project, $target, $actor, $context] = $this->riskTarget();
+        $cycle = app(RiskAnalysisWorkflow::class)->create($project, $target, $context->projectThreats()->firstOrFail(), ['title' => 'Ausfall', 'cause' => 'Defekt', 'event' => 'Stillstand', 'impact' => 'Lieferverzug', 'availability' => true, 'integrity' => false, 'confidentiality' => false], [], $actor);
+        app(RiskChangeInvalidator::class)->invalidateForTarget($project, $target, 'topology', $actor);
+        $this->expectException(QueryException::class);
+        DB::table('risk_analysis_cycles')->where('id', $cycle->id)->update(['impact' => 'Manipuliert']);
+    }
+
+    public function test_superseded_assessment_history_is_database_immutable(): void
+    {
+        [$project, $target, $actor, $context] = $this->riskTarget();
+        $cycle = app(RiskAnalysisWorkflow::class)->create($project, $target, $context->projectThreats()->firstOrFail(), ['title' => 'Ausfall', 'cause' => 'Defekt', 'event' => 'Stillstand', 'impact' => 'Lieferverzug', 'availability' => true, 'integrity' => false, 'confidentiality' => false], [], $actor);
+        $assessment = app(RiskAssessmentService::class)->assessInherent($cycle, 'frequent', 'considerable', 'Bewertung', $actor, 0);
+        app(RiskChangeInvalidator::class)->invalidateForTarget($project, $target, 'topology', $actor);
+        $this->expectException(QueryException::class);
+        DB::table('risk_assessments')->where('id', $assessment->id)->update(['rationale' => 'Manipuliert']);
     }
 }

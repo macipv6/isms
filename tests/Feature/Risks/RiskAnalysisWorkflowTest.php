@@ -142,4 +142,65 @@ class RiskAnalysisWorkflowTest extends TestCase
         $this->expectException(ValidationException::class);
         $triggers->dismiss($trigger, $actor);
     }
+
+    public function test_material_change_supersedes_draft_and_allows_clean_next_cycle(): void
+    {
+        [$project, $target, $actor, $context] = $this->riskTarget();
+        $workflow = app(RiskAnalysisWorkflow::class);
+        $trigger = app(RiskTriggerEvaluator::class)->register($project, $target, RiskTriggerType::NonstandardScenario, 'Aktueller Auslöser', $actor);
+        $draft = $workflow->create($project, $target, $context->projectThreats()->firstOrFail(), $this->scenario(), [$trigger->id], $actor);
+        app(RiskChangeInvalidator::class)->invalidateForTarget($project, $target, 'topology', $actor);
+        $this->assertSame(RiskCycleStatus::Superseded, $draft->fresh()->status);
+        $this->assertFalse($draft->fresh()->is_current);
+        $this->assertTrue($draft->fresh()->needs_review);
+        $this->assertSame(1, $draft->fresh()->lock_version);
+        $next = $workflow->startNextCycle($draft->analysis, $actor);
+        $this->assertSame(2, $next->cycle_number);
+        $this->assertSame(RiskCycleStatus::Draft, $next->status);
+        $this->assertSame(0, $next->assessments()->count());
+        $this->assertSame([$trigger->id], $next->triggerLinks()->pluck('risk_analysis_trigger_id')->all());
+        $this->assertSame(1, $draft->analysis->cycles()->where('is_current', true)->count());
+    }
+
+    public function test_material_change_supersedes_inherent_assessment_without_copying_it(): void
+    {
+        [$project, $target, $actor, $context] = $this->riskTarget();
+        $workflow = app(RiskAnalysisWorkflow::class);
+        $cycle = $workflow->create($project, $target, $context->projectThreats()->firstOrFail(), $this->scenario(), [], $actor);
+        app(RiskAssessmentService::class)->assessInherent($cycle, 'frequent', 'considerable', 'Bewertung', $actor, 0);
+        app(RiskChangeInvalidator::class)->invalidateForTarget($project, $target, 'provenance', $actor);
+        $this->assertSame(RiskCycleStatus::Superseded, $cycle->fresh()->status);
+        $this->assertSame(1, $cycle->assessments()->count());
+        $next = $workflow->startNextCycle($cycle->analysis, $actor);
+        $this->assertSame(2, $next->cycle_number);
+        $this->assertSame(0, $next->assessments()->count());
+    }
+
+    public function test_next_cycle_copies_only_current_trigger_links_after_invalidation(): void
+    {
+        [$project, $target, $actor, $context] = $this->riskTarget();
+        $triggers = app(RiskTriggerEvaluator::class);
+        $current = $triggers->register($project, $target, RiskTriggerType::NonstandardScenario, 'Aktueller Auslöser', $actor);
+        $obsolete = $triggers->register($project, $target, RiskTriggerType::Manual, 'Alter Auslöser', $actor);
+        $workflow = app(RiskAnalysisWorkflow::class);
+        $old = $workflow->create($project, $target, $context->projectThreats()->firstOrFail(), $this->scenario(), [$current->id, $obsolete->id], $actor);
+        $old->update(['status' => RiskCycleStatus::Completed, 'completed_by' => $actor->id, 'completed_at' => now()]);
+        DB::table('risk_analysis_triggers')->where('id', $obsolete->id)->update(['status' => 'superseded']);
+        app(RiskChangeInvalidator::class)->invalidateForTarget($project, $target, 'topology', $actor);
+        $next = $workflow->startNextCycle($old->analysis, $actor);
+        $this->assertSame([$current->id], $next->triggerLinks()->pluck('risk_analysis_trigger_id')->all());
+        $this->assertSame(2, $old->triggerLinks()->count());
+        $this->assertSame(0, $next->assessments()->count());
+    }
+
+    public function test_scenario_validation_has_stable_german_messages(): void
+    {
+        [$project, $target, $actor, $context] = $this->riskTarget();
+        try {
+            app(RiskAnalysisWorkflow::class)->create($project, $target, $context->projectThreats()->firstOrFail(), [...$this->scenario(), 'title' => null], [], $actor);
+            $this->fail('Missing title accepted.');
+        } catch (ValidationException $exception) {
+            $this->assertSame('Dieses Feld ist erforderlich.', $exception->errors()['title'][0]);
+        }
+    }
 }
