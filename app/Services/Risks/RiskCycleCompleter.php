@@ -2,7 +2,6 @@
 
 namespace App\Services\Risks;
 
-use App\Enums\RiskAssessmentPhase;
 use App\Enums\RiskCycleStatus;
 use App\Enums\RiskDecisionStatus;
 use App\Models\RiskAnalysisCycle;
@@ -22,7 +21,7 @@ class RiskCycleCompleter
     {
         return DB::transaction(function () use ($cycle, $actor, $expectedVersion): RiskAnalysisCycle {
             [$project, $locked, $actor] = $this->access->lock($cycle, $actor, [RiskCycleStatus::ResidualAssessed, RiskCycleStatus::AwaitingDecision], $expectedVersion);
-            $assessment = $locked->assessments()->where('phase', RiskAssessmentPhase::Residual->value)->with('riskLevel')->first();
+            $assessment = $locked->currentResidualAssessment()->with('riskLevel')->first();
             $treatment = $locked->treatment()->first();
             if (! $assessment || ! $treatment) {
                 throw ValidationException::withMessages(['cycle' => 'Eine gültige Restbewertung und Behandlung sind erforderlich.']);
@@ -31,7 +30,7 @@ class RiskCycleCompleter
             $high = in_array($assessment->riskLevel->key, ['high', 'very_high'], true);
             if ($high) {
                 $decision = $locked->decisions()->whereNull('invalidated_at')->where('status', RiskDecisionStatus::Accepted->value)->first();
-                if (! $decision || $locked->status !== RiskCycleStatus::AwaitingDecision) {
+                if (! $decision || $decision->residual_assessment_id !== $assessment->id || $locked->status !== RiskCycleStatus::AwaitingDecision) {
                     throw ValidationException::withMessages(['decision' => 'Ein aktueller Managemententscheid zur Risikoakzeptanz ist erforderlich.']);
                 }
                 if (DB::table('risk_decision_evidence_links as links')->join('evidence_files as evidence', function ($join): void {

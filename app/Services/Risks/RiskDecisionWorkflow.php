@@ -46,7 +46,7 @@ class RiskDecisionWorkflow
 
         return DB::transaction(function () use ($cycle, $status, $channel, $values, $evidence, $actor): RiskDecision {
             [$project, $locked, $actor] = $this->access->lock($cycle, $actor, [RiskCycleStatus::AwaitingDecision]);
-            $residual = $locked->assessments()->where('phase', RiskAssessmentPhase::Residual->value)->latest('assessed_at')->firstOrFail();
+            $residual = $locked->currentResidualAssessment()->firstOrFail();
             if ($channel === RiskDecisionChannel::Internal && $residual->assessed_by === $actor->id) {
                 throw ValidationException::withMessages(['decision_maker' => 'Die bewertende Person darf ihre eigene Risikoentscheidung nicht treffen.']);
             }
@@ -60,7 +60,8 @@ class RiskDecisionWorkflow
                 }
             }
             $decision = $locked->decisions()->create([
-                'project_id' => $project->id, 'status' => $status, 'channel' => $channel,
+                'project_id' => $project->id, 'residual_assessment_id' => $residual->id, 'assessment_phase' => RiskAssessmentPhase::Residual->value,
+                'status' => $status, 'channel' => $channel,
                 'rationale' => trim((string) $values['rationale']), 'decision_date' => $values['decision_date'],
                 'recorded_by' => $actor->id,
                 'internal_decision_maker_id' => $channel === RiskDecisionChannel::Internal ? $actor->id : null,

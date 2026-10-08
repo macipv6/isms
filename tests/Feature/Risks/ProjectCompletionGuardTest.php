@@ -14,6 +14,7 @@ use App\Services\Risks\RiskChangeInvalidator;
 use App\Services\Risks\RiskCycleCompleter;
 use App\Services\Risks\RiskTreatmentWorkflow;
 use App\Services\Risks\RiskTriggerEvaluator;
+use App\Services\Threats\ProjectThreatService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -74,5 +75,58 @@ class ProjectCompletionGuardTest extends TestCase
         app(RiskChangeInvalidator::class)->invalidateForTarget($project, $target, 'protection_need', $actor);
         $this->expectException(ValidationException::class);
         app(ProjectWorkflow::class)->update($project, ['status' => ProjectStatus::Completed], $actor);
+    }
+
+    public function test_triggerless_analysis_without_current_cycle_blocks_project_completion(): void
+    {
+        [$project, , $actor, $target] = $this->assessedCycle('rare', 'limited');
+        $actor->update(['role' => 'admin']);
+        app(RiskChangeInvalidator::class)->invalidateForTarget($project, $target, 'protection_need', $actor);
+
+        $this->expectException(ValidationException::class);
+        app(ProjectWorkflow::class)->update($project, ['status' => ProjectStatus::Completed], $actor);
+    }
+
+    public function test_current_completed_triggerless_analysis_allows_project_completion(): void
+    {
+        [$project, $cycle, $actor] = $this->assessedCycle('rare', 'limited');
+        $actor->update(['role' => 'admin']);
+        app(RiskTreatmentWorkflow::class)->select($cycle, RiskTreatmentAction::Accept, ['rationale' => 'Tragbar'], $actor);
+        app(RiskAssessmentService::class)->assessResidual($cycle, 'rare', 'limited', 'Unverändert', $actor, $cycle->fresh()->lock_version);
+        app(RiskCycleCompleter::class)->complete($cycle, $actor, $cycle->fresh()->lock_version);
+
+        app(ProjectWorkflow::class)->update($project, ['status' => ProjectStatus::Completed], $actor);
+        $this->assertSame(ProjectStatus::Completed, $project->fresh()->status);
+    }
+
+    public function test_retired_threat_analysis_does_not_block_completed_replacement(): void
+    {
+        [$project, $target, $actor] = $this->riskTarget();
+        $actor->update(['role' => 'admin']);
+        $threatData = [
+            'code' => 'CUSTOM-1', 'title' => 'Standortgefahr', 'description' => 'Lokale Bedrohung',
+            'addition_rationale' => 'Projektbezug', 'confidentiality' => false, 'integrity' => false,
+            'availability' => true, 'responsible_name' => 'Verantwortlich',
+        ];
+        $threats = app(ProjectThreatService::class);
+        $oldThreat = $threats->createCustom($project, $threatData, $actor);
+        $oldCycle = app(RiskAnalysisWorkflow::class)->create($project, $target, $oldThreat, [
+            'title' => 'Altszenario', 'cause' => 'Ursache', 'event' => 'Ereignis', 'impact' => 'Folge',
+            'availability' => true, 'confidentiality' => false, 'integrity' => false,
+        ], [], $actor);
+        app(RiskAssessmentService::class)->assessInherent($oldCycle, 'rare', 'limited', 'Erstbewertung', $actor, 0);
+        $replacementThreat = $threats->updateCustom($oldThreat, [...$threatData, 'title' => 'Neue Standortgefahr'], $actor);
+        $this->assertFalse($oldThreat->fresh()->is_active);
+        $cycle = app(RiskAnalysisWorkflow::class)->create($project, $target, $replacementThreat, [
+            'title' => 'Ersatzszenario', 'cause' => 'Ursache', 'event' => 'Ereignis', 'impact' => 'Folge',
+            'availability' => true, 'confidentiality' => false, 'integrity' => false,
+        ], [], $actor);
+        app(RiskAssessmentService::class)->assessInherent($cycle, 'rare', 'limited', 'Erstbewertung', $actor, 0);
+        app(RiskTreatmentWorkflow::class)->select($cycle, RiskTreatmentAction::Accept, ['rationale' => 'Tragbar'], $actor);
+        app(RiskAssessmentService::class)->assessResidual($cycle, 'rare', 'limited', 'Unverändert', $actor, $cycle->fresh()->lock_version);
+        app(RiskCycleCompleter::class)->complete($cycle, $actor, $cycle->fresh()->lock_version);
+
+        app(ProjectWorkflow::class)->update($project, ['status' => ProjectStatus::Completed], $actor);
+        $this->assertSame(ProjectStatus::Completed, $project->fresh()->status);
     }
 }

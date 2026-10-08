@@ -26,8 +26,9 @@ class RiskTreatmentPrerequisites
                 throw ValidationException::withMessages(['evidence' => 'Übertragung erfordert einen Vertragspartner und geprüften Nachweis.']);
             }
         } elseif ($treatment->action === RiskTreatmentAction::Avoid) {
-            if (trim((string) $treatment->cessation_statement) === '') {
-                throw ValidationException::withMessages(['cessation_statement' => 'Eine geprüfte Beendigungsbestätigung ist erforderlich.']);
+            $proof = DB::table('evidence_files')->where('project_id', $cycle->project_id)->where('id', $treatment->cessation_evidence_id)->where('status', 'verified')->whereNotNull('reviewed_by')->whereNotNull('reviewed_at')->lockForUpdate()->exists();
+            if (trim((string) $treatment->cessation_statement) === '' || ! $proof) {
+                throw ValidationException::withMessages(['cessation_evidence_id' => 'Ein aktueller geprüfter Stilllegungsnachweis ist erforderlich.']);
             }
         } else {
             $inherent = $cycle->assessments()->where('phase', RiskAssessmentPhase::Inherent->value)->firstOrFail();

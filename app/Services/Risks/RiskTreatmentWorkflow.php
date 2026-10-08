@@ -2,6 +2,7 @@
 
 namespace App\Services\Risks;
 
+use App\Enums\EvidenceReviewStatus;
 use App\Enums\RiskCycleStatus;
 use App\Enums\RiskTreatmentAction;
 use App\Models\EvidenceFile;
@@ -27,6 +28,7 @@ class RiskTreatmentWorkflow
             'counterparty_name' => [$action === RiskTreatmentAction::Transfer ? 'required' : 'nullable', 'string', 'max:255'],
             'counterparty_email' => ['nullable', 'email', 'max:255'],
             'cessation_statement' => [$action === RiskTreatmentAction::Avoid ? 'required' : 'nullable', 'string', 'max:10000'],
+            'cessation_evidence_id' => [$action === RiskTreatmentAction::Avoid ? 'required' : 'nullable', 'uuid'],
         ], ['required' => 'Dieses Feld ist erforderlich.', 'max' => 'Dieses Feld ist zu lang.', 'email' => 'Eine gültige E-Mail-Adresse ist erforderlich.'])->validate();
         foreach (['rationale', $action === RiskTreatmentAction::Transfer ? 'counterparty_name' : 'rationale', $action === RiskTreatmentAction::Avoid ? 'cessation_statement' : 'rationale'] as $key) {
             if (trim((string) $validated[$key]) === '') {
@@ -36,12 +38,19 @@ class RiskTreatmentWorkflow
 
         return DB::transaction(function () use ($cycle, $action, $validated, $actor): RiskTreatment {
             [$project, $locked, $actor] = $this->access->lock($cycle, $actor, [RiskCycleStatus::InherentAssessed, RiskCycleStatus::TreatmentInProgress, RiskCycleStatus::ResidualAssessed, RiskCycleStatus::AwaitingDecision]);
+            if ($action === RiskTreatmentAction::Avoid) {
+                $proof = EvidenceFile::query()->whereKey($validated['cessation_evidence_id'])->where('project_id', $project->id)->lockForUpdate()->first();
+                if (! $proof || $proof->status !== EvidenceReviewStatus::Verified || ! $proof->reviewed_by || ! $proof->reviewed_at) {
+                    throw ValidationException::withMessages(['cessation_evidence_id' => 'Ein geprüfter Stilllegungsnachweis aus diesem Projekt ist erforderlich.']);
+                }
+            }
             $treatment = $locked->treatment()->first();
             $attributes = [
                 'project_id' => $project->id, 'action' => $action, 'rationale' => trim((string) $validated['rationale']),
                 'counterparty_name' => $action === RiskTreatmentAction::Transfer ? trim((string) $validated['counterparty_name']) : null,
                 'counterparty_email' => $action === RiskTreatmentAction::Transfer ? ($validated['counterparty_email'] ?? null) : null,
                 'cessation_statement' => $action === RiskTreatmentAction::Avoid ? trim((string) $validated['cessation_statement']) : null,
+                'cessation_evidence_id' => $action === RiskTreatmentAction::Avoid ? $validated['cessation_evidence_id'] : null,
                 'selected_by' => $actor->id,
             ];
             $event = $treatment ? 'risk_analysis.treatment_changed' : 'risk_analysis.treatment_selected';

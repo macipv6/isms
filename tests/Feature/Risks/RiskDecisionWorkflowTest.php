@@ -6,6 +6,7 @@ use App\Enums\EvidenceReviewStatus;
 use App\Enums\RiskDecisionStatus;
 use App\Enums\RiskTreatmentAction;
 use App\Models\EvidenceFile;
+use App\Models\RiskAssessment;
 use App\Models\User;
 use App\Services\Risks\RiskAssessmentService;
 use App\Services\Risks\RiskChangeInvalidator;
@@ -78,6 +79,25 @@ class RiskDecisionWorkflowTest extends TestCase
         $this->assertSame('treatment_in_progress', $cycle->fresh()->status->value);
         $this->expectException(ValidationException::class);
         app(RiskCycleCompleter::class)->complete($cycle, $actor, $cycle->fresh()->lock_version);
+    }
+
+    public function test_reassessment_preserves_rejected_decisions_residual_revision(): void
+    {
+        [, $cycle, $actor] = $this->residualCycle();
+        $first = RiskAssessment::query()->where('risk_analysis_cycle_id', $cycle->id)->where('phase', 'residual')->sole();
+        $manager = User::factory()->for($actor->organization)->create(['role' => 'admin']);
+        $decision = app(RiskDecisionWorkflow::class)->decideInternal($cycle, RiskDecisionStatus::Rejected, 'Nacharbeit', '2026-10-08', $manager);
+
+        $second = app(RiskAssessmentService::class)->assessResidual($cycle, 'frequent', 'considerable', 'Neue Restbewertung', $actor, $cycle->fresh()->lock_version);
+
+        $this->assertDatabaseCount('risk_assessments', 3);
+        $this->assertSame($first->id, $decision->fresh()->residual_assessment_id);
+        $this->assertSame($first->id, $decision->fresh()->residualAssessment->id);
+        $this->assertSame(1, $first->fresh()->revision);
+        $this->assertSame(2, $second->revision);
+        $this->assertSame('Residualbegründung', $first->fresh()->rationale);
+        $this->assertNotSame($first->id, $second->id);
+        $this->assertSame($second->id, $cycle->fresh()->currentResidualAssessment->id);
     }
 
     public function test_material_change_invalidates_current_management_decision(): void

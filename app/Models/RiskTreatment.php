@@ -11,7 +11,7 @@ class RiskTreatment extends Model
 {
     use HasUuids;
 
-    protected $fillable = ['project_id', 'risk_analysis_cycle_id', 'action', 'rationale', 'counterparty_name', 'counterparty_email', 'cessation_statement', 'selected_by'];
+    protected $fillable = ['project_id', 'risk_analysis_cycle_id', 'action', 'rationale', 'counterparty_name', 'counterparty_email', 'cessation_statement', 'cessation_evidence_id', 'selected_by'];
 
     protected function casts(): array
     {

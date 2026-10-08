@@ -70,6 +70,7 @@ class RiskChangeInvalidator
             $ids = DB::table($table)->where('project_id', $project->id)->where($kind.'_id', $id)->pluck('risk_analysis_cycle_id');
             if ($kind === 'evidence') {
                 $ids = $ids->merge(DB::table('risk_decision_evidence_links')->where('project_id', $project->id)->where('evidence_id', $id)->pluck('risk_analysis_cycle_id'))->unique();
+                $ids = $ids->merge(DB::table('risk_treatments')->where('project_id', $project->id)->where('cessation_evidence_id', $id)->pluck('risk_analysis_cycle_id'))->unique();
             }
             foreach (RiskAnalysisCycle::query()->where('project_id', $project->id)->whereIn('id', $ids)->where('is_current', true)->where('needs_review', false)->lockForUpdate()->get() as $cycle) {
                 if (in_array($cycle->status, [RiskCycleStatus::ResidualAssessed, RiskCycleStatus::AwaitingDecision, RiskCycleStatus::Completed], true)) {

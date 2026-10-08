@@ -88,7 +88,7 @@ class RiskTreatmentWorkflowTest extends TestCase
 
     public function test_avoid_needs_verification_statement_and_accept_cannot_reduce(): void
     {
-        [, $cycle, $actor] = $this->assessedCycle();
+        [$project, $cycle, $actor] = $this->assessedCycle();
         $workflow = app(RiskTreatmentWorkflow::class);
         try {
             $workflow->select($cycle, RiskTreatmentAction::Avoid, ['rationale' => 'Beendet'], $actor);
@@ -96,7 +96,8 @@ class RiskTreatmentWorkflowTest extends TestCase
         } catch (ValidationException) {
             $this->assertDatabaseCount('risk_treatments', 0);
         }
-        $workflow->select($cycle, RiskTreatmentAction::Avoid, ['rationale' => 'Beendet', 'cessation_statement' => 'Szenario nachweislich beendet'], $actor);
+        $proof = EvidenceFile::factory()->for($project, 'project')->create(['status' => EvidenceReviewStatus::Verified, 'reviewed_by' => $actor->id, 'reviewed_at' => now()]);
+        $workflow->select($cycle, RiskTreatmentAction::Avoid, ['rationale' => 'Beendet', 'cessation_statement' => 'Szenario nachweislich beendet', 'cessation_evidence_id' => $proof->id], $actor);
         app(RiskAssessmentService::class)->assessResidual($cycle, 'rare', 'limited', 'Beendigung geprüft', $actor, $cycle->fresh()->lock_version);
 
         [, $acceptCycle, $acceptActor] = $this->assessedCycle();
@@ -169,13 +170,60 @@ class RiskTreatmentWorkflowTest extends TestCase
 
     public function test_reselecting_treatment_after_rejected_decision_updates_the_single_row(): void
     {
-        [, $cycle, $actor] = $this->assessedCycle();
+        [$project, $cycle, $actor] = $this->assessedCycle();
         $workflow = app(RiskTreatmentWorkflow::class);
         $first = $workflow->select($cycle, RiskTreatmentAction::Accept, ['rationale' => 'Ursprünglich'], $actor);
-        $second = $workflow->select($cycle, RiskTreatmentAction::Avoid, ['rationale' => 'Neue Behandlung', 'cessation_statement' => 'Verifiziert beendet'], $actor);
+        $proof = EvidenceFile::factory()->for($project, 'project')->create(['status' => EvidenceReviewStatus::Verified, 'reviewed_by' => $actor->id, 'reviewed_at' => now()]);
+        $second = $workflow->select($cycle, RiskTreatmentAction::Avoid, ['rationale' => 'Neue Behandlung', 'cessation_statement' => 'Verifiziert beendet', 'cessation_evidence_id' => $proof->id], $actor);
         $this->assertSame($first->id, $second->id);
         $this->assertSame(RiskTreatmentAction::Avoid, $second->action);
         $this->assertDatabaseCount('risk_treatments', 1);
+    }
+
+    public function test_avoid_rejects_missing_rejected_and_foreign_cessation_proof(): void
+    {
+        [$project, $cycle, $actor] = $this->assessedCycle();
+        $workflow = app(RiskTreatmentWorkflow::class);
+        $details = ['rationale' => 'Stilllegung', 'cessation_statement' => 'Betrieb eingestellt'];
+        $rejected = EvidenceFile::factory()->for($project, 'project')->create(['status' => EvidenceReviewStatus::Rejected]);
+        $unreviewed = EvidenceFile::factory()->for($project, 'project')->create(['status' => EvidenceReviewStatus::Verified]);
+        $foreign = EvidenceFile::factory()->create(['status' => EvidenceReviewStatus::Verified]);
+        foreach ([null, $rejected->id, $unreviewed->id, $foreign->id] as $id) {
+            try {
+                $workflow->select($cycle, RiskTreatmentAction::Avoid, [...$details, 'cessation_evidence_id' => $id], $actor);
+                $this->fail('Unverified cessation proof was accepted.');
+            } catch (ValidationException) {
+                $this->assertDatabaseCount('risk_treatments', 0);
+            }
+        }
+    }
+
+    public function test_rejecting_avoid_cessation_proof_invalidates_completed_cycle(): void
+    {
+        [$project, $cycle, $actor] = $this->assessedCycle('rare', 'limited');
+        $proof = EvidenceFile::factory()->for($project, 'project')->create(['status' => EvidenceReviewStatus::Verified, 'reviewed_by' => $actor->id, 'reviewed_at' => now()]);
+        app(RiskTreatmentWorkflow::class)->select($cycle, RiskTreatmentAction::Avoid, [
+            'rationale' => 'Stilllegung', 'cessation_statement' => 'Betrieb eingestellt', 'cessation_evidence_id' => $proof->id,
+        ], $actor);
+        app(RiskAssessmentService::class)->assessResidual($cycle, 'rare', 'limited', 'Verifiziert', $actor, $cycle->fresh()->lock_version);
+        app(RiskCycleCompleter::class)->complete($cycle, $actor, $cycle->fresh()->lock_version);
+
+        app(EvidenceReviewService::class)->review($proof, EvidenceReviewStatus::Rejected, 'Nicht mehr gültig', $actor);
+        $this->assertTrue($cycle->fresh()->needs_review);
+    }
+
+    public function test_avoid_completion_rechecks_revoked_proof(): void
+    {
+        [$project, $cycle, $actor] = $this->assessedCycle('rare', 'limited');
+        $proof = EvidenceFile::factory()->for($project, 'project')->create(['status' => EvidenceReviewStatus::Verified, 'reviewed_by' => $actor->id, 'reviewed_at' => now()]);
+        app(RiskTreatmentWorkflow::class)->select($cycle, RiskTreatmentAction::Avoid, [
+            'rationale' => 'Stilllegung', 'cessation_statement' => 'Betrieb eingestellt', 'cessation_evidence_id' => $proof->id,
+        ], $actor);
+        app(RiskAssessmentService::class)->assessResidual($cycle, 'rare', 'limited', 'Verifiziert', $actor, $cycle->fresh()->lock_version);
+        $proof->update(['status' => EvidenceReviewStatus::Rejected]);
+
+        $this->expectException(ValidationException::class);
+        app(RiskCycleCompleter::class)->complete($cycle, $actor, $cycle->fresh()->lock_version);
     }
 
     public function test_completion_rechecks_live_transfer_evidence(): void

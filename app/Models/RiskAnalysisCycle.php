@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\RiskAssessmentPhase;
 use App\Enums\RiskCycleStatus;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -31,6 +32,14 @@ class RiskAnalysisCycle extends Model
     public function assessments(): HasMany
     {
         return $this->hasMany(RiskAssessment::class, 'risk_analysis_cycle_id');
+    }
+
+    /** @return HasOne<RiskAssessment, $this> */
+    public function currentResidualAssessment(): HasOne
+    {
+        return $this->hasOne(RiskAssessment::class, 'risk_analysis_cycle_id')
+            ->where('phase', RiskAssessmentPhase::Residual->value)
+            ->orderByDesc('revision');
     }
 
     /** @return HasMany<RiskAnalysisTriggerLink, $this> */

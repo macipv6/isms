@@ -110,6 +110,7 @@ SQL);
             $table->uuid('project_id');
             $table->uuid('risk_analysis_cycle_id');
             $table->string('phase', 16);
+            $table->unsignedInteger('revision')->default(1);
             $table->uuid('methodology_version_id');
             $table->uuid('frequency_level_id');
             $table->uuid('impact_level_id');
@@ -122,9 +123,12 @@ SQL);
             $table->foreign(['methodology_version_id', 'frequency_level_id'])->references(['version_id', 'id'])->on('risk_frequency_levels')->restrictOnDelete();
             $table->foreign(['methodology_version_id', 'impact_level_id'])->references(['version_id', 'id'])->on('risk_impact_levels')->restrictOnDelete();
             $table->foreign(['methodology_version_id', 'risk_level_id'])->references(['version_id', 'id'])->on('risk_levels')->restrictOnDelete();
-            $table->unique(['risk_analysis_cycle_id', 'phase']);
+            $table->unique(['risk_analysis_cycle_id', 'phase', 'revision']);
+            $table->unique(['id', 'project_id', 'risk_analysis_cycle_id', 'phase'], 'risk_assessment_decision_reference_unique');
         });
         DB::statement("ALTER TABLE risk_assessments ADD CONSTRAINT risk_assessment_phase_check CHECK (phase IN ('inherent','residual'))");
+        DB::statement('ALTER TABLE risk_assessments ADD CONSTRAINT risk_assessment_revision_check CHECK (revision > 0)');
+        DB::statement("CREATE UNIQUE INDEX risk_assessment_one_inherent ON risk_assessments (risk_analysis_cycle_id) WHERE phase = 'inherent'");
         DB::statement('ALTER TABLE risk_assessments ADD CONSTRAINT risk_assessment_rationale_check CHECK (length(trim(rationale)) > 0 AND length(rationale) <= 10000)');
         DB::unprepared(<<<'SQL'
 CREATE OR REPLACE FUNCTION protect_completed_risk_child() RETURNS trigger AS $$
@@ -143,7 +147,22 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 SQL);
-        DB::statement('CREATE TRIGGER risk_assessment_completed_immutable BEFORE INSERT OR UPDATE OR DELETE ON risk_assessments FOR EACH ROW EXECUTE FUNCTION protect_completed_risk_child()');
+        DB::unprepared(<<<'SQL'
+CREATE OR REPLACE FUNCTION protect_risk_assessment_history() RETURNS trigger AS $$
+DECLARE cycle_status text;
+BEGIN
+    IF TG_OP IN ('UPDATE', 'DELETE') THEN
+        RAISE EXCEPTION 'Risk assessment history is immutable';
+    END IF;
+    SELECT status INTO cycle_status FROM risk_analysis_cycles WHERE id = NEW.risk_analysis_cycle_id;
+    IF cycle_status IN ('completed', 'superseded') THEN
+        RAISE EXCEPTION 'Historical risk cycle children are immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+SQL);
+        DB::statement('CREATE TRIGGER risk_assessment_history_immutable BEFORE INSERT OR UPDATE OR DELETE ON risk_assessments FOR EACH ROW EXECUTE FUNCTION protect_risk_assessment_history()');
 
         DB::statement('ALTER TABLE risk_analysis_triggers ADD CONSTRAINT risk_analysis_triggers_id_project_unique UNIQUE (id, project_id)');
         Schema::create('risk_analysis_trigger_links', function (Blueprint $table): void {
@@ -167,6 +186,7 @@ SQL);
         Schema::dropIfExists('risk_analysis_cycles');
         Schema::dropIfExists('risk_analyses');
         DB::statement('DROP FUNCTION IF EXISTS protect_completed_risk_child()');
+        DB::statement('DROP FUNCTION IF EXISTS protect_risk_assessment_history()');
         DB::statement('DROP FUNCTION IF EXISTS protect_completed_risk_cycle()');
         DB::statement('DROP FUNCTION IF EXISTS enforce_risk_cycle_number()');
     }

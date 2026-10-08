@@ -82,12 +82,9 @@ class RiskAssessmentService
             }
             $this->prerequisites->assert($locked, $treatment, $frequency, $impact);
             $risk = $this->matrix->category($version, $frequencyKey, $impactKey);
-            $existing = $locked->assessments()->where('phase', RiskAssessmentPhase::Residual->value)->first();
-            if ($existing) {
-                $existing->delete();
-            }
+            $revision = 1 + (int) $locked->assessments()->where('phase', RiskAssessmentPhase::Residual->value)->max('revision');
             $assessment = $locked->assessments()->create([
-                'project_id' => $project->id, 'phase' => RiskAssessmentPhase::Residual, 'methodology_version_id' => $version->id,
+                'project_id' => $project->id, 'phase' => RiskAssessmentPhase::Residual, 'revision' => $revision, 'methodology_version_id' => $version->id,
                 'frequency_level_id' => $frequency->id, 'impact_level_id' => $impact->id, 'risk_level_id' => $risk->id,
                 'rationale' => $rationale, 'assessed_by' => $actor->id, 'assessed_at' => now(),
             ]);

@@ -45,10 +45,24 @@ class ProjectWorkflow
 
     private function assertCompletable(IsmsProject $project): void
     {
-        $openCycle = DB::table('risk_analysis_cycles')->where('project_id', $project->id)->where('is_current', true)
-            ->where(fn ($query) => $query->where('status', '<>', 'completed')->orWhere('needs_review', true))->exists();
-        if ($openCycle) {
-            throw ValidationException::withMessages(['status' => 'Das Projekt enthält offene oder veraltete Risikoanalysen.']);
+        $activeAnalyses = DB::table('risk_analyses as analyses')
+            ->join('project_threats as threats', function ($join): void {
+                $join->on('threats.id', '=', 'analyses.project_threat_id')->on('threats.project_id', '=', 'analyses.project_id');
+            })
+            ->leftJoin('business_processes as processes', function ($join): void {
+                $join->on('processes.id', '=', 'analyses.business_process_id')->on('processes.project_id', '=', 'analyses.project_id');
+            })
+            ->leftJoin('assets', function ($join): void {
+                $join->on('assets.id', '=', 'analyses.asset_id')->on('assets.project_id', '=', 'analyses.project_id');
+            })
+            ->where('analyses.project_id', $project->id)->where('threats.is_active', true)
+            ->where(fn ($query) => $query->where('processes.is_active', true)->orWhere('assets.is_active', true))
+            ->pluck('analyses.id');
+        foreach ($activeAnalyses as $analysisId) {
+            $current = DB::table('risk_analysis_cycles')->where('project_id', $project->id)->where('risk_analysis_id', $analysisId)->where('is_current', true)->get(['status', 'needs_review']);
+            if ($current->count() !== 1 || $current->first()->status !== 'completed' || $current->first()->needs_review) {
+                throw ValidationException::withMessages(['status' => 'Das Projekt enthält offene oder veraltete Risikoanalysen.']);
+            }
         }
         $requiredTriggers = DB::table('risk_analysis_triggers')->where('project_id', $project->id)
             ->whereIn('type', ['elevated_protection_need', 'insufficient_baseline_coverage', 'nonstandard_scenario'])

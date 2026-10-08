@@ -2,10 +2,12 @@
 
 namespace Tests\Feature\Risks;
 
+use App\Enums\EvidenceReviewStatus;
 use App\Enums\ProjectStatus;
 use App\Enums\RiskDecisionStatus;
 use App\Enums\RiskTreatmentAction;
 use App\Models\AuditEvent;
+use App\Models\EvidenceFile;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use App\Services\Projects\ProjectWorkflow;
@@ -32,6 +34,23 @@ class RiskAuditTest extends TestCase
             $this->assertStringNotContainsString($secret, $contexts);
         }
         $this->assertSame(2, AuditEvent::query()->whereIn('event_type', ['risk_analysis.treatment_selected', 'risk_analysis.residual_assessed'])->count());
+    }
+
+    public function test_avoid_proof_metadata_and_cessation_text_stay_out_of_audit(): void
+    {
+        [$project, $cycle, $actor] = $this->assessedCycle();
+        $proof = EvidenceFile::factory()->for($project, 'project')->create([
+            'status' => EvidenceReviewStatus::Verified, 'reviewed_by' => $actor->id, 'reviewed_at' => now(),
+            'original_name' => 'SECRET-PROOF-NAME.pdf',
+        ]);
+        app(RiskTreatmentWorkflow::class)->select($cycle, RiskTreatmentAction::Avoid, [
+            'rationale' => 'SECRET-AVOID-RATIONALE', 'cessation_statement' => 'SECRET-CESSATION-STATEMENT',
+            'cessation_evidence_id' => $proof->id,
+        ], $actor);
+        $context = json_encode(AuditEvent::query()->where('event_type', 'risk_analysis.treatment_selected')->sole()->context);
+        foreach (['SECRET-PROOF-NAME', 'SECRET-AVOID-RATIONALE', 'SECRET-CESSATION-STATEMENT', $proof->id] as $secret) {
+            $this->assertStringNotContainsString($secret, $context);
+        }
     }
 
     public function test_audit_failure_rolls_back_treatment_write(): void
@@ -67,6 +86,25 @@ class RiskAuditTest extends TestCase
             $this->fail('Residual assessment persisted.');
         } catch (RuntimeException) {
             $this->assertDatabaseCount('risk_assessments', 1);
+            $this->assertSame('treatment_in_progress', $cycle->fresh()->status->value);
+        }
+    }
+
+    public function test_failed_reassessment_keeps_rejected_decisions_original_revision(): void
+    {
+        [, $cycle, $actor] = $this->assessedCycle();
+        app(RiskTreatmentWorkflow::class)->select($cycle, RiskTreatmentAction::Accept, ['rationale' => 'Akzeptiert'], $actor);
+        $first = app(RiskAssessmentService::class)->assessResidual($cycle, 'frequent', 'considerable', 'Erster Rest', $actor, $cycle->fresh()->lock_version);
+        $manager = User::factory()->for($actor->organization)->create(['role' => 'admin']);
+        $decision = app(RiskDecisionWorkflow::class)->decideInternal($cycle, RiskDecisionStatus::Rejected, 'Nacharbeit', '2026-10-08', $manager);
+        $this->failAuditOn('risk_analysis.residual_assessed');
+
+        try {
+            app(RiskAssessmentService::class)->assessResidual($cycle, 'frequent', 'considerable', 'Zweiter Rest', $actor, $cycle->fresh()->lock_version);
+            $this->fail('Failed reassessment persisted.');
+        } catch (RuntimeException) {
+            $this->assertDatabaseCount('risk_assessments', 2);
+            $this->assertSame($first->id, $decision->fresh()->residual_assessment_id);
             $this->assertSame('treatment_in_progress', $cycle->fresh()->status->value);
         }
     }
