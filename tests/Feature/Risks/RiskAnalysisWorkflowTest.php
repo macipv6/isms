@@ -193,6 +193,77 @@ class RiskAnalysisWorkflowTest extends TestCase
         $this->assertSame(0, $next->assessments()->count());
     }
 
+    public function test_next_cycle_opens_trigger_when_completed_predecessor_was_its_only_coverage(): void
+    {
+        [$project, $target, $actor, $context] = $this->riskTarget();
+        $trigger = app(RiskTriggerEvaluator::class)->register($project, $target, RiskTriggerType::NonstandardScenario, 'Einzeldeckung', $actor);
+        $workflow = app(RiskAnalysisWorkflow::class);
+        $prior = $workflow->create($project, $target, $context->projectThreats()->firstOrFail(), $this->scenario(), [$trigger->id], $actor);
+        $prior->update(['status' => RiskCycleStatus::Completed, 'completed_by' => $actor->id, 'completed_at' => now()]);
+        $trigger->update(['status' => 'covered']);
+
+        $next = $workflow->startNextCycle($prior->analysis, $actor);
+
+        $this->assertFalse($prior->fresh()->is_current);
+        $this->assertSame('open', $trigger->fresh()->status->value);
+        $this->assertSame(RiskCycleStatus::Draft, $next->status);
+        $this->assertSame([$trigger->id], $next->triggerLinks()->pluck('risk_analysis_trigger_id')->all());
+    }
+
+    public function test_next_cycle_keeps_trigger_covered_until_last_current_completed_cycle_advances(): void
+    {
+        [$project, $target, $actor, $context] = $this->riskTarget();
+        $trigger = app(RiskTriggerEvaluator::class)->register($project, $target, RiskTriggerType::NonstandardScenario, 'Mehrfachdeckung', $actor);
+        $threat = $context->projectThreats()->firstOrFail();
+        $workflow = app(RiskAnalysisWorkflow::class);
+        $first = $workflow->create($project, $target, $threat, $this->scenario(), [$trigger->id], $actor);
+        $second = $workflow->create($project, $target, $threat, $this->scenario('Brand'), [$trigger->id], $actor);
+        foreach ([$first, $second] as $cycle) {
+            $cycle->update(['status' => RiskCycleStatus::Completed, 'completed_by' => $actor->id, 'completed_at' => now()]);
+        }
+        $trigger->update(['status' => 'covered']);
+
+        $next = $workflow->startNextCycle($first->analysis, $actor);
+
+        $this->assertSame('covered', $trigger->fresh()->status->value);
+        $this->assertTrue($second->fresh()->is_current);
+        $this->assertSame([$trigger->id], $next->triggerLinks()->pluck('risk_analysis_trigger_id')->all());
+
+        $workflow->startNextCycle($second->analysis, $actor);
+        $this->assertSame('open', $trigger->fresh()->status->value);
+    }
+
+    public function test_next_cycle_trigger_status_and_links_roll_back_when_audit_fails(): void
+    {
+        [$project, $target, $actor, $context] = $this->riskTarget();
+        $trigger = app(RiskTriggerEvaluator::class)->register($project, $target, RiskTriggerType::NonstandardScenario, 'Audit-Rollback', $actor);
+        $workflow = app(RiskAnalysisWorkflow::class);
+        $prior = $workflow->create($project, $target, $context->projectThreats()->firstOrFail(), $this->scenario(), [$trigger->id], $actor);
+        $prior->update(['status' => RiskCycleStatus::Completed, 'completed_by' => $actor->id, 'completed_at' => now()]);
+        $trigger->update(['status' => 'covered']);
+        $this->app->bind(AuditLogger::class, fn () => new class extends AuditLogger
+        {
+            public function record(string $eventType, ?User $actor, array $context = [], ?string $organizationId = null): AuditEvent
+            {
+                if ($eventType === 'risk_analysis.cycle_started') {
+                    throw new RuntimeException('Audit unavailable');
+                }
+
+                return parent::record($eventType, $actor, $context, $organizationId);
+            }
+        });
+
+        try {
+            app(RiskAnalysisWorkflow::class)->startNextCycle($prior->analysis, $actor);
+            $this->fail('Cycle survived audit failure.');
+        } catch (RuntimeException) {
+            $this->assertTrue($prior->fresh()->is_current);
+            $this->assertSame('covered', $trigger->fresh()->status->value);
+            $this->assertSame(1, $prior->analysis->cycles()->count());
+            $this->assertSame([$trigger->id], $prior->triggerLinks()->pluck('risk_analysis_trigger_id')->all());
+        }
+    }
+
     public function test_scenario_validation_has_stable_german_messages(): void
     {
         [$project, $target, $actor, $context] = $this->riskTarget();

@@ -19,7 +19,7 @@ use Illuminate\Validation\ValidationException;
 
 class RiskAnalysisWorkflow
 {
-    public function __construct(private readonly ProtectionNeedAccess $access, private readonly AuditLogger $audit) {}
+    public function __construct(private readonly ProtectionNeedAccess $access, private readonly AuditLogger $audit, private readonly RiskTriggerCoverage $coverage) {}
 
     /** @param array<string, mixed> $scenario
      * @param  list<string>  $triggerIds
@@ -100,6 +100,7 @@ class RiskAnalysisWorkflow
                 ->pluck('triggers.id');
             foreach ($currentTriggerIds as $triggerId) {
                 $cycle->triggerLinks()->create(['project_id' => $project->id, 'risk_analysis_trigger_id' => $triggerId]);
+                $this->coverage->reopenIfUncovered($project, $triggerId);
             }
             $this->audit->record('risk_analysis.cycle_started', $actor, ['project_id' => $project->id, 'source_id' => $prior->id, 'target_id' => $cycle->id], $project->organization_id);
 

@@ -8,14 +8,13 @@ use App\Enums\RiskCycleStatus;
 use App\Models\IsmsProject;
 use App\Models\RiskAnalysis;
 use App\Models\RiskAnalysisCycle;
-use App\Models\RiskAnalysisTrigger;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use Illuminate\Support\Facades\DB;
 
 class RiskChangeInvalidator
 {
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(private readonly AuditLogger $audit, private readonly RiskTriggerCoverage $coverage) {}
 
     public function invalidateForTarget(IsmsProject $project, DependencyNode $target, string $reason, ?User $actor = null): void
     {
@@ -57,19 +56,7 @@ class RiskChangeInvalidator
                 ? ['needs_review' => true]
                 : ['needs_review' => true, 'is_current' => false, 'status' => RiskCycleStatus::Superseded, 'lock_version' => $cycle->lock_version + 1, 'updated_by' => $actor === null ? $cycle->updated_by : $actor->id]);
             foreach ($cycle->triggerLinks()->pluck('risk_analysis_trigger_id') as $triggerId) {
-                $stillCovered = DB::table('risk_analysis_trigger_links as links')
-                    ->join('risk_analysis_cycles as cycles', function ($join): void {
-                        $join->on('cycles.id', '=', 'links.risk_analysis_cycle_id')->on('cycles.project_id', '=', 'links.project_id');
-                    })
-                    ->where('links.project_id', $project->id)
-                    ->where('links.risk_analysis_trigger_id', $triggerId)
-                    ->where('cycles.is_current', true)
-                    ->where('cycles.needs_review', false)
-                    ->where('cycles.status', 'completed')
-                    ->exists();
-                if (! $stillCovered) {
-                    RiskAnalysisTrigger::query()->whereKey($triggerId)->where('project_id', $project->id)->where('status', 'covered')->update(['status' => 'open']);
-                }
+                $this->coverage->reopenIfUncovered($project, $triggerId);
             }
             $this->audit->record('risk_analysis.invalidated', $actor, [
                 'project_id' => $project->id,
