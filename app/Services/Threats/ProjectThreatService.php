@@ -5,17 +5,19 @@ namespace App\Services\Threats;
 use App\Models\IsmsProject;
 use App\Models\ProjectRiskContext;
 use App\Models\ProjectThreat;
+use App\Models\RiskAnalysis;
 use App\Models\RiskTargetThreatReview;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use App\Services\ProtectionNeeds\ProtectionNeedAccess;
+use App\Services\Risks\RiskChangeInvalidator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
 class ProjectThreatService
 {
-    public function __construct(private readonly ProtectionNeedAccess $access, private readonly ThreatOverviewService $overview, private readonly AuditLogger $audit) {}
+    public function __construct(private readonly ProtectionNeedAccess $access, private readonly ThreatOverviewService $overview, private readonly AuditLogger $audit, private readonly RiskChangeInvalidator $risks) {}
 
     /** @param array<string, mixed> $data */
     public function createCustom(IsmsProject $project, array $data, User $actor): ProjectThreat
@@ -53,13 +55,14 @@ class ProjectThreatService
                 throw ValidationException::withMessages(['threat' => 'Nur aktive projektspezifische Gefährdungen können geändert werden.']);
             }
             $this->uniqueCode($project, $context, $fields['code'], $locked->id);
-            if (! RiskTargetThreatReview::query()->where('project_threat_id', $locked->id)->exists()) {
+            if (! RiskTargetThreatReview::query()->where('project_threat_id', $locked->id)->exists() && ! RiskAnalysis::query()->where('project_threat_id', $locked->id)->exists()) {
                 $locked->update($fields);
                 $this->audit->record('project_threat.updated', $actor, ['project_id' => $project->id, 'target_id' => $locked->id, 'changed_fields' => array_keys($fields)], $project->organization_id);
 
                 return $locked;
             }
             $locked->update(['is_active' => false, 'retired_at' => now()]);
+            $this->risks->invalidateForThreat($project, $locked->id, 'threat_replacement', $actor);
             $replacement = ProjectThreat::query()->create([...$fields, 'project_id' => $project->id, 'project_risk_context_id' => $context->id, 'catalog_version_id' => $context->catalog_version_id, 'sort_order' => $locked->sort_order, 'created_by' => $actor->id]);
             $this->overview->ensureForThreat($project, $replacement->id);
             $this->audit->record('project_threat.replaced', $actor, ['project_id' => $project->id, 'source_id' => $locked->id, 'target_id' => $replacement->id], $project->organization_id);

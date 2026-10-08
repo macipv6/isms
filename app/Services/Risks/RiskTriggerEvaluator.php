@@ -107,7 +107,15 @@ class RiskTriggerEvaluator
             if ($locked->type !== RiskTriggerType::Manual || $locked->created_by !== $actor->id || $locked->status !== RiskTriggerStatus::Open) {
                 throw ValidationException::withMessages(['trigger' => 'Nur eigene offene manuelle Auslöser können zurückgenommen werden.']);
             }
-            // A completed cycle cannot exist before Task 6 introduces analyses.
+            $completedLink = DB::table('risk_analysis_trigger_links as links')
+                ->join('risk_analysis_cycles as cycles', 'cycles.id', '=', 'links.risk_analysis_cycle_id')
+                ->where('links.project_id', $project->id)
+                ->where('links.risk_analysis_trigger_id', $locked->id)
+                ->where('cycles.status', 'completed')
+                ->exists();
+            if ($completedLink) {
+                throw ValidationException::withMessages(['trigger' => 'Ein Auslöser mit abgeschlossener Risikoanalyse kann nicht zurückgenommen werden.']);
+            }
             $locked->update(['status' => RiskTriggerStatus::Superseded]);
             $this->auditStatus($project, $locked, 'risk_trigger.superseded', $actor);
         });

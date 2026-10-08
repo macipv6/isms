@@ -97,7 +97,9 @@ class ProjectThreatWorkflowTest extends TestCase
         $this->assertSame($original->code, $replacement->code);
         $this->assertSame(2, DB::table('project_threats')->where('code', $original->code)->count());
 
+        $analysisMigration = require database_path('migrations/2026_09_22_064000_create_risk_analysis_tables.php');
         $migration = require database_path('migrations/2026_09_22_063000_create_risk_trigger_and_threat_review_tables.php');
+        $analysisMigration->down();
         $migration->down();
         $this->assertFalse(Schema::hasTable('risk_analysis_triggers'));
         $this->assertDatabaseHas('project_threats', ['id' => $original->id, 'is_active' => false, 'code' => $original->code]);
@@ -109,6 +111,7 @@ class ProjectThreatWorkflowTest extends TestCase
             $this->assertSame(2, DB::table('project_threats')->where('code', $original->code)->count());
         }
         $migration->up();
+        $analysisMigration->up();
         $this->assertTrue(Schema::hasTable('risk_analysis_triggers'));
         $this->assertSame(2, DB::table('project_threats')->where('code', $original->code)->count());
     }

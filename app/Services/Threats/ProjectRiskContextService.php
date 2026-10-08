@@ -12,12 +12,13 @@ use App\Models\ThreatCatalogVersion;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use App\Services\ProtectionNeeds\ProtectionNeedPropagator;
+use App\Services\Risks\RiskChangeInvalidator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class ProjectRiskContextService
 {
-    public function __construct(private readonly AuditLogger $audit, private readonly ProtectionNeedPropagator $propagator, private readonly ThreatOverviewService $overview) {}
+    public function __construct(private readonly AuditLogger $audit, private readonly ProtectionNeedPropagator $propagator, private readonly ThreatOverviewService $overview, private readonly RiskChangeInvalidator $risks) {}
 
     public function initialize(IsmsProject $project, RiskMethodologyVersion $methodology, ThreatCatalogVersion $catalog, User $actor): ProjectRiskContext
     {
@@ -78,6 +79,7 @@ class ProjectRiskContextService
                 $this->copyCatalog($context, $catalog, $actor);
             }
             $context->update(['methodology_version_id' => $methodology->id, 'catalog_version_id' => $catalog->id]);
+            $this->risks->invalidateForProject($project, $oldMethodology->id !== $methodology->id ? 'methodology' : 'catalog', $actor);
             $this->propagator->recalculate($project, [], $actor);
             if ($oldCatalog->id !== $catalog->id) {
                 $this->ensureThreatReviews($context, $catalog, $project);

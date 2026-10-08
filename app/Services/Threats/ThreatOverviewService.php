@@ -71,7 +71,19 @@ class ThreatOverviewService
         $currentCatalog = DB::table('project_risk_contexts')->where('project_id', $project->id)->value('catalog_version_id');
         $query = RiskTargetThreatReview::query()->where('risk_target_threat_reviews.project_id', $project->id)->where($column, $target->id)->whereHas('threat', fn ($q) => $q->where('is_active', true)->where(fn ($threat) => $threat->where('catalog_version_id', $currentCatalog)->orWhereNull('threat_catalog_entry_id')));
 
-        // Task 6 adds current-analysis checks. Until then, an applicable row cannot complete the overview.
-        return $query->count() > 0 && ! $query->whereIn('status', [ThreatReviewStatus::Unreviewed->value, ThreatReviewStatus::Applicable->value])->exists();
+        if ((clone $query)->count() === 0 || (clone $query)->where('status', ThreatReviewStatus::Unreviewed->value)->exists()) {
+            return false;
+        }
+
+        return ! (clone $query)->where('status', ThreatReviewStatus::Applicable->value)->get()->contains(function (RiskTargetThreatReview $review) use ($project, $column, $target): bool {
+            return ! DB::table('risk_analyses as analyses')
+                ->join('risk_analysis_cycles as cycles', 'cycles.risk_analysis_id', '=', 'analyses.id')
+                ->where('analyses.project_id', $project->id)
+                ->where('analyses.'.$column, $target->id)
+                ->where('analyses.project_threat_id', $review->project_threat_id)
+                ->where('cycles.is_current', true)
+                ->where('cycles.needs_review', false)
+                ->exists();
+        });
     }
 }

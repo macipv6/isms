@@ -1,0 +1,66 @@
+<?php
+
+namespace App\Services\Risks;
+
+use App\Data\Dependencies\DependencyNode;
+use App\Enums\DependencyNodeType;
+use App\Models\IsmsProject;
+use App\Models\RiskAnalysis;
+use App\Models\RiskAnalysisCycle;
+use App\Models\RiskAnalysisTrigger;
+use App\Models\User;
+use App\Services\Audit\AuditLogger;
+use Illuminate\Support\Facades\DB;
+
+class RiskChangeInvalidator
+{
+    public function __construct(private readonly AuditLogger $audit) {}
+
+    public function invalidateForTarget(IsmsProject $project, DependencyNode $target, string $reason, ?User $actor = null): void
+    {
+        DB::transaction(function () use ($project, $target, $reason, $actor): void {
+            $project = IsmsProject::query()->lockForUpdate()->findOrFail($project->id);
+            $column = $target->type === DependencyNodeType::Process ? 'business_process_id' : 'asset_id';
+            foreach (RiskAnalysis::query()->where('project_id', $project->id)->where($column, $target->id)->get() as $analysis) {
+                $this->invalidateAnalysis($project, $analysis, $reason, $actor);
+            }
+        });
+    }
+
+    public function invalidateForProject(IsmsProject $project, string $reason, ?User $actor = null): void
+    {
+        DB::transaction(function () use ($project, $reason, $actor): void {
+            $project = IsmsProject::query()->lockForUpdate()->findOrFail($project->id);
+            foreach (RiskAnalysis::query()->where('project_id', $project->id)->get() as $analysis) {
+                $this->invalidateAnalysis($project, $analysis, $reason, $actor);
+            }
+        });
+    }
+
+    public function invalidateForThreat(IsmsProject $project, string $threatId, string $reason, ?User $actor = null): void
+    {
+        DB::transaction(function () use ($project, $threatId, $reason, $actor): void {
+            $project = IsmsProject::query()->lockForUpdate()->findOrFail($project->id);
+            foreach (RiskAnalysis::query()->where('project_id', $project->id)->where('project_threat_id', $threatId)->get() as $analysis) {
+                $this->invalidateAnalysis($project, $analysis, $reason, $actor);
+            }
+        });
+    }
+
+    private function invalidateAnalysis(IsmsProject $project, RiskAnalysis $analysis, string $reason, ?User $actor): void
+    {
+        $cycles = RiskAnalysisCycle::query()->where('risk_analysis_id', $analysis->id)->where('is_current', true)->where('needs_review', false)->lockForUpdate()->get();
+        foreach ($cycles as $cycle) {
+            $cycle->update(['needs_review' => true]);
+            foreach ($cycle->triggerLinks()->pluck('risk_analysis_trigger_id') as $triggerId) {
+                RiskAnalysisTrigger::query()->whereKey($triggerId)->where('project_id', $project->id)->where('status', 'covered')->update(['status' => 'open']);
+            }
+            $this->audit->record('risk_analysis.invalidated', $actor, [
+                'project_id' => $project->id,
+                'target_id' => $cycle->id,
+                'reason' => in_array($reason, ['protection_need', 'provenance', 'topology', 'lifecycle', 'methodology', 'catalog', 'threat_replacement'], true) ? $reason : 'related_change',
+                'new_status' => 'needs_review',
+            ], $project->organization_id);
+        }
+    }
+}

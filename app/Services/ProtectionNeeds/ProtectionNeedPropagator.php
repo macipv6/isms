@@ -150,6 +150,9 @@ class ProtectionNeedPropagator
                     }
                     $effectiveChanged = $oldEffective !== $effective;
                     if (isset($affected[$id]) && ($sourceChanged || $inheritedChanged || $effectiveChanged)) {
+                        if ($sourceChanged && ! $invalidated) {
+                            $this->invalidator->invalidateRiskTarget($node, 'provenance', $actor);
+                        }
                         if ($effectiveChanged) {
                             $effectiveTargets[$id] = $node;
                         }

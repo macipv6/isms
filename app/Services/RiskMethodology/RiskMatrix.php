@@ -17,7 +17,7 @@ class RiskMatrix
             ->first();
 
         if (! $cell) {
-            throw ValidationException::withMessages(['matrix' => 'No risk category exists for these methodology levels.']);
+            throw ValidationException::withMessages(['matrix' => 'Für diese Methodikstufen ist keine Risikokategorie hinterlegt.']);
         }
 
         return $cell->riskLevel;
