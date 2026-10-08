@@ -2,10 +2,16 @@
 
 namespace Tests\Feature\Risks;
 
+use App\Data\Dependencies\DependencyNode;
 use App\Enums\ProjectStatus;
 use App\Enums\RiskTreatmentAction;
 use App\Enums\RiskTriggerType;
 use App\Enums\UserRole;
+use App\Models\IsmsProject;
+use App\Models\ProjectThreat;
+use App\Models\RiskAnalysisCycle;
+use App\Models\RiskMethodologyVersion;
+use App\Models\ThreatCatalogVersion;
 use App\Models\User;
 use App\Services\Projects\ProjectWorkflow;
 use App\Services\Risks\RiskAnalysisWorkflow;
@@ -14,7 +20,9 @@ use App\Services\Risks\RiskChangeInvalidator;
 use App\Services\Risks\RiskCycleCompleter;
 use App\Services\Risks\RiskTreatmentWorkflow;
 use App\Services\Risks\RiskTriggerEvaluator;
+use App\Services\Threats\ProjectRiskContextService;
 use App\Services\Threats\ProjectThreatService;
+use App\Services\Threats\ThreatCatalogPublisher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -128,5 +136,85 @@ class ProjectCompletionGuardTest extends TestCase
 
         app(ProjectWorkflow::class)->update($project, ['status' => ProjectStatus::Completed], $actor);
         $this->assertSame(ProjectStatus::Completed, $project->fresh()->status);
+    }
+
+    public function test_old_catalog_analysis_does_not_block_completed_current_catalog_analysis(): void
+    {
+        [$project, $target, $actor, $context] = $this->riskTarget();
+        $actor->update(['role' => 'admin']);
+        $oldThreat = $context->projectThreats()->firstOrFail();
+        $oldCycle = $this->createCycle($project, $target, $oldThreat, $actor, 'Alter Katalog');
+        app(RiskAssessmentService::class)->assessInherent($oldCycle, 'rare', 'limited', 'Erstbewertung', $actor, 0);
+
+        $catalog = $context->catalog_version_id;
+        $publisher = app(ThreatCatalogPublisher::class);
+        $next = $publisher->clonePublished(ThreatCatalogVersion::query()->findOrFail($catalog), $actor);
+        $publisher->publish($next, $actor);
+        app(ProjectRiskContextService::class)->migrate($context, RiskMethodologyVersion::query()->findOrFail($context->methodology_version_id), $next, $actor);
+
+        $this->assertTrue($oldThreat->fresh()->is_active);
+        $this->assertTrue($oldCycle->fresh()->needs_review);
+        $this->assertFalse($oldCycle->fresh()->is_current);
+        $newThreat = $context->projectThreats()->where('catalog_version_id', $next->id)->firstOrFail();
+        $newCycle = $this->createCycle($project, $target, $newThreat, $actor, 'Aktueller Katalog');
+        app(RiskAssessmentService::class)->assessInherent($newCycle, 'rare', 'limited', 'Erstbewertung', $actor, 0);
+
+        try {
+            app(ProjectWorkflow::class)->update($project, ['status' => ProjectStatus::Completed], $actor);
+            $this->fail('Incomplete current catalog analysis accepted.');
+        } catch (ValidationException) {
+            $this->assertSame(ProjectStatus::Draft, $project->fresh()->status);
+        }
+
+        $this->completeAcceptCycle($newCycle, $actor);
+        app(ProjectWorkflow::class)->update($project, ['status' => ProjectStatus::Completed], $actor);
+        $this->assertSame(ProjectStatus::Completed, $project->fresh()->status);
+    }
+
+    public function test_active_custom_threat_without_catalog_replacement_still_blocks_completion(): void
+    {
+        [$project, $target, $actor, $context] = $this->riskTarget();
+        $actor->update(['role' => 'admin']);
+        $custom = app(ProjectThreatService::class)->createCustom($project, [
+            'code' => 'CUSTOM-2', 'title' => 'Eigenes Risiko', 'description' => 'Projektbezogene Gefahr',
+            'addition_rationale' => 'Zusätzlicher Projektbezug', 'confidentiality' => false, 'integrity' => false,
+            'availability' => true, 'responsible_name' => 'Verantwortlich',
+        ], $actor);
+        $publisher = app(ThreatCatalogPublisher::class);
+        $next = $publisher->clonePublished(ThreatCatalogVersion::query()->findOrFail($context->catalog_version_id), $actor);
+        $publisher->publish($next, $actor);
+        app(ProjectRiskContextService::class)->migrate($context, RiskMethodologyVersion::query()->findOrFail($context->methodology_version_id), $next, $actor);
+        $baseline = $context->projectThreats()->where('catalog_version_id', $next->id)->firstOrFail();
+        $baselineCycle = $this->createCycle($project, $target, $baseline, $actor, 'Aktueller Katalog');
+        app(RiskAssessmentService::class)->assessInherent($baselineCycle, 'rare', 'limited', 'Erstbewertung', $actor, 0);
+        $this->completeAcceptCycle($baselineCycle, $actor);
+
+        $customCycle = $this->createCycle($project, $target, $custom, $actor, 'Eigene Gefahr');
+        app(RiskAssessmentService::class)->assessInherent($customCycle, 'rare', 'limited', 'Erstbewertung', $actor, 0);
+        try {
+            app(ProjectWorkflow::class)->update($project, ['status' => ProjectStatus::Completed], $actor);
+            $this->fail('Incomplete active custom analysis accepted.');
+        } catch (ValidationException) {
+            $this->assertSame(ProjectStatus::Draft, $project->fresh()->status);
+        }
+
+        $this->completeAcceptCycle($customCycle, $actor);
+        app(ProjectWorkflow::class)->update($project, ['status' => ProjectStatus::Completed], $actor);
+        $this->assertSame(ProjectStatus::Completed, $project->fresh()->status);
+    }
+
+    private function createCycle(IsmsProject $project, DependencyNode $target, ProjectThreat $threat, User $actor, string $title): RiskAnalysisCycle
+    {
+        return app(RiskAnalysisWorkflow::class)->create($project, $target, $threat, [
+            'title' => $title, 'cause' => 'Ursache', 'event' => 'Ereignis', 'impact' => 'Folge',
+            'availability' => true, 'confidentiality' => false, 'integrity' => false,
+        ], [], $actor);
+    }
+
+    private function completeAcceptCycle(RiskAnalysisCycle $cycle, User $actor): void
+    {
+        app(RiskTreatmentWorkflow::class)->select($cycle, RiskTreatmentAction::Accept, ['rationale' => 'Tragbar'], $actor);
+        app(RiskAssessmentService::class)->assessResidual($cycle, 'rare', 'limited', 'Unverändert', $actor, $cycle->fresh()->lock_version);
+        app(RiskCycleCompleter::class)->complete($cycle, $actor, $cycle->fresh()->lock_version);
     }
 }

@@ -6,6 +6,7 @@ use App\Data\Dependencies\DependencyNode;
 use App\Enums\DependencyNodeType;
 use App\Enums\ThreatReviewStatus;
 use App\Models\IsmsProject;
+use App\Models\ProjectThreat;
 use App\Models\RiskTargetThreatReview;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
@@ -22,7 +23,7 @@ class ThreatOverviewService
         $this->access->target($project, $target);
         $column = $target->type === DependencyNodeType::Process ? 'business_process_id' : 'asset_id';
         $currentCatalog = DB::table('project_risk_contexts')->where('project_id', $project->id)->value('catalog_version_id');
-        $ids = DB::table('project_threats')->where('project_id', $project->id)->where('is_active', true)->where(fn ($q) => $q->where('catalog_version_id', $currentCatalog)->orWhereNull('threat_catalog_entry_id'))->pluck('id');
+        $ids = ProjectThreat::query()->where('project_id', $project->id)->currentForCatalog($currentCatalog)->pluck('id');
         foreach ($ids as $threatId) {
             RiskTargetThreatReview::query()->firstOrCreate(['project_id' => $project->id, $column => $target->id, 'project_threat_id' => $threatId], ['status' => ThreatReviewStatus::Unreviewed]);
         }
@@ -53,7 +54,7 @@ class ThreatOverviewService
             $locked = RiskTargetThreatReview::query()->lockForUpdate()->findOrFail($review->id);
             $project = $this->access->project(IsmsProject::query()->findOrFail($locked->project_id));
             $currentCatalog = DB::table('project_risk_contexts')->where('project_id', $project->id)->value('catalog_version_id');
-            if (! $locked->threat()->where('project_id', $project->id)->where('is_active', true)->where(fn ($q) => $q->where('catalog_version_id', $currentCatalog)->orWhereNull('threat_catalog_entry_id'))->exists()) {
+            if (! $locked->threat()->where('project_id', $project->id)->currentForCatalog($currentCatalog)->exists()) {
                 throw ValidationException::withMessages(['threat' => 'Die Gefährdung ist nicht mehr aktiv.']);
             }
             $old = $locked->status;
@@ -69,7 +70,7 @@ class ThreatOverviewService
         $this->access->target($project, $target);
         $column = $target->type === DependencyNodeType::Process ? 'business_process_id' : 'asset_id';
         $currentCatalog = DB::table('project_risk_contexts')->where('project_id', $project->id)->value('catalog_version_id');
-        $query = RiskTargetThreatReview::query()->where('risk_target_threat_reviews.project_id', $project->id)->where($column, $target->id)->whereHas('threat', fn ($q) => $q->where('is_active', true)->where(fn ($threat) => $threat->where('catalog_version_id', $currentCatalog)->orWhereNull('threat_catalog_entry_id')));
+        $query = RiskTargetThreatReview::query()->where('risk_target_threat_reviews.project_id', $project->id)->where($column, $target->id)->whereHas('threat', fn ($q) => $q->currentForCatalog($currentCatalog));
 
         if ((clone $query)->count() === 0 || (clone $query)->where('status', ThreatReviewStatus::Unreviewed->value)->exists()) {
             return false;

@@ -33,7 +33,7 @@ class RiskAnalysisWorkflow
             $project = $this->access->project($project);
             $this->access->target($project, $target);
             $context = DB::table('project_risk_contexts')->where('project_id', $project->id)->first();
-            $threat = ProjectThreat::query()->whereKey($threat->id)->where('project_id', $project->id)->where('is_active', true)->where(fn ($q) => $q->where('catalog_version_id', $context?->catalog_version_id)->orWhereNull('threat_catalog_entry_id'))->first();
+            $threat = ProjectThreat::query()->whereKey($threat->id)->where('project_id', $project->id)->currentForCatalog($context?->catalog_version_id)->first();
             if (! $context || ! $threat) {
                 throw ValidationException::withMessages(['threat' => 'Eine aktuelle Gefährdung im Projekt ist erforderlich.']);
             }
@@ -75,8 +75,7 @@ class RiskAnalysisWorkflow
                 throw ValidationException::withMessages(['cycle' => 'Ein neuer Zyklus erfordert einen abgeschlossenen oder ungültig gewordenen Vorgänger.']);
             }
             $currentCatalog = DB::table('project_risk_contexts')->where('project_id', $project->id)->value('catalog_version_id');
-            $threat = ProjectThreat::query()->whereKey($analysis->project_threat_id)->where('project_id', $project->id)->where('is_active', true)
-                ->where(fn ($query) => $query->where('catalog_version_id', $currentCatalog)->orWhereNull('threat_catalog_entry_id'))->first();
+            $threat = ProjectThreat::query()->whereKey($analysis->project_threat_id)->where('project_id', $project->id)->currentForCatalog($currentCatalog)->first();
             if (! $threat) {
                 throw ValidationException::withMessages(['threat' => 'Die Gefährdung ist nicht mehr aktiv.']);
             }

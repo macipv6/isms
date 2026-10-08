@@ -5,6 +5,7 @@ namespace App\Services\Projects;
 use App\Enums\ProjectStatus;
 use App\Enums\UserRole;
 use App\Models\IsmsProject;
+use App\Models\ProjectThreat;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use App\Services\ProtectionNeeds\ProtectionNeedAccess;
@@ -45,17 +46,16 @@ class ProjectWorkflow
 
     private function assertCompletable(IsmsProject $project): void
     {
+        $currentCatalog = DB::table('project_risk_contexts')->where('project_id', $project->id)->value('catalog_version_id');
+        $currentThreatIds = ProjectThreat::query()->where('project_id', $project->id)->currentForCatalog($currentCatalog)->select('id');
         $activeAnalyses = DB::table('risk_analyses as analyses')
-            ->join('project_threats as threats', function ($join): void {
-                $join->on('threats.id', '=', 'analyses.project_threat_id')->on('threats.project_id', '=', 'analyses.project_id');
-            })
             ->leftJoin('business_processes as processes', function ($join): void {
                 $join->on('processes.id', '=', 'analyses.business_process_id')->on('processes.project_id', '=', 'analyses.project_id');
             })
             ->leftJoin('assets', function ($join): void {
                 $join->on('assets.id', '=', 'analyses.asset_id')->on('assets.project_id', '=', 'analyses.project_id');
             })
-            ->where('analyses.project_id', $project->id)->where('threats.is_active', true)
+            ->where('analyses.project_id', $project->id)->whereIn('analyses.project_threat_id', $currentThreatIds)
             ->where(fn ($query) => $query->where('processes.is_active', true)->orWhere('assets.is_active', true))
             ->pluck('analyses.id');
         foreach ($activeAnalyses as $analysisId) {

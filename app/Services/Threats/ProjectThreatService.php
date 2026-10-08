@@ -109,7 +109,7 @@ class ProjectThreatService
 
     private function uniqueCode(IsmsProject $project, ProjectRiskContext $context, string $code, ?string $exceptId = null): void
     {
-        $query = ProjectThreat::query()->where('project_id', $project->id)->where('is_active', true)->where(fn ($q) => $q->where('catalog_version_id', $context->catalog_version_id)->orWhereNull('threat_catalog_entry_id'))->whereRaw('lower(code) = lower(?)', [$code]);
+        $query = ProjectThreat::query()->where('project_id', $project->id)->currentForCatalog($context->catalog_version_id)->whereRaw('lower(code) = lower(?)', [$code]);
         if ($exceptId !== null) {
             $query->whereKeyNot($exceptId);
         }
