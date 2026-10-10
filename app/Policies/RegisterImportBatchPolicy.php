@@ -31,11 +31,12 @@ class RegisterImportBatchPolicy
 
     private function internal(User $user): bool
     {
-        $user->loadMissing('organization');
+        $currentUser = User::query()->with('organization')->find($user->id);
 
-        return $user->is_active
-            && $user->organization?->organization_type === 'internal'
-            && in_array($user->role, [UserRole::Admin, UserRole::Consultant], true);
+        return $currentUser?->is_active
+            && $currentUser->organization?->organization_type === 'internal'
+            && $currentUser->organization->is_active
+            && in_array($currentUser->getRawOriginal('role'), [UserRole::Admin->value, UserRole::Consultant->value], true);
     }
 
     private function writable(IsmsProject $project): bool

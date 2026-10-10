@@ -52,7 +52,7 @@ class RegisterImportController extends Controller
             'id' => $batch->id,
             'kind' => $batch->kind->value,
             'status' => $batch->status->value,
-            'summary' => $batch->summary,
+            'summary' => array_diff_key($batch->summary, ['state_fingerprint' => true]),
             'expiresAt' => $batch->expires_at->toIso8601String(),
             'expired' => $expired,
             'canConfirm' => $canConfirm,

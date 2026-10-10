@@ -18,7 +18,20 @@ use App\Http\Controllers\IsmsProjectController;
 use App\Http\Controllers\MeasureController;
 use App\Http\Controllers\MeasureRegisterController;
 use App\Http\Controllers\OrganizationController;
+use App\Http\Controllers\ProjectRiskContextController;
+use App\Http\Controllers\ProjectThreatController;
+use App\Http\Controllers\ProtectionNeedController;
+use App\Http\Controllers\ProtectionNeedDowngradeController;
+use App\Http\Controllers\ProtectionNeedRegisterController;
 use App\Http\Controllers\RegisterImportController;
+use App\Http\Controllers\RiskAnalysisController;
+use App\Http\Controllers\RiskDecisionController;
+use App\Http\Controllers\RiskMethodologyController;
+use App\Http\Controllers\RiskRegisterController;
+use App\Http\Controllers\RiskTreatmentController;
+use App\Http\Controllers\RiskTriggerController;
+use App\Http\Controllers\ThreatCatalogController;
+use App\Http\Controllers\ThreatReviewController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/login');
@@ -51,6 +64,38 @@ Route::middleware(['auth', 'active-user'])->group(function (): void {
     Route::get('/organizations/{organization}/projects/{project}/processes', BusinessProcessRegisterController::class)->name('processes.index');
     Route::get('/organizations/{organization}/projects/{project}/assets', AssetRegisterController::class)->name('assets.index');
     Route::get('/organizations/{organization}/projects/{project}/dependencies', DependencyRegisterController::class)->name('dependencies.index');
+    Route::get('/organizations/{organization}/projects/{project}/protection-needs', ProtectionNeedRegisterController::class)->name('protection-needs.index');
+    Route::get('/organizations/{organization}/projects/{project}/risks', RiskRegisterController::class)->name('risks.index');
+    Route::get('/risk-methodologies', [RiskMethodologyController::class, 'index'])->name('risk-methodologies.index');
+    Route::get('/threat-catalogs', [ThreatCatalogController::class, 'index'])->name('threat-catalogs.index');
+
+    Route::put('/organizations/{organization}/projects/{project}/protection-needs/targets/{targetType}/{target}', [ProtectionNeedController::class, 'rate'])->name('protection-needs.rate');
+    Route::post('/organizations/{organization}/projects/{project}/protection-needs/targets/{targetType}/{target}/approve', [ProtectionNeedController::class, 'approve'])->name('protection-needs.approve');
+    Route::post('/organizations/{organization}/projects/{project}/protection-needs/{need}/downgrades', [ProtectionNeedDowngradeController::class, 'store'])->name('protection-needs.downgrades.store');
+    Route::post('/organizations/{organization}/projects/{project}/downgrades/{downgrade}/decision', [ProtectionNeedDowngradeController::class, 'decide'])->name('protection-needs.downgrades.decide');
+
+    Route::post('/organizations/{organization}/projects/{project}/risks/context', [ProjectRiskContextController::class, 'initialize'])->name('risks.context.initialize');
+    Route::post('/organizations/{organization}/projects/{project}/risks/context/{context}/migrate', [ProjectRiskContextController::class, 'migrate'])->name('risks.context.migrate');
+    Route::post('/organizations/{organization}/projects/{project}/risks/targets/{targetType}/{target}/triggers', [RiskTriggerController::class, 'store'])->name('risks.triggers.store');
+    Route::post('/organizations/{organization}/projects/{project}/risks/triggers/{trigger}/dismiss', [RiskTriggerController::class, 'dismiss'])->name('risks.triggers.dismiss');
+    Route::post('/organizations/{organization}/projects/{project}/risks/threats', [ProjectThreatController::class, 'store'])->name('risks.threats.store');
+    Route::put('/organizations/{organization}/projects/{project}/risks/threats/{threat}', [ProjectThreatController::class, 'update'])->name('risks.threats.update');
+    Route::patch('/organizations/{organization}/projects/{project}/risks/reviews/{review}', [ThreatReviewController::class, 'update'])->name('risks.reviews.update');
+    Route::post('/organizations/{organization}/projects/{project}/risks/targets/{targetType}/{target}/analyses', [RiskAnalysisController::class, 'store'])->name('risks.analyses.store');
+    Route::post('/organizations/{organization}/projects/{project}/risks/analyses/{analysis}/cycles', [RiskAnalysisController::class, 'nextCycle'])->name('risks.cycles.next');
+    Route::post('/organizations/{organization}/projects/{project}/risk-cycles/{cycle}/assessments', [RiskAnalysisController::class, 'assess'])->name('risks.assessments.store');
+    Route::post('/organizations/{organization}/projects/{project}/risk-cycles/{cycle}/treatment', [RiskTreatmentController::class, 'select'])->name('risks.treatment.select');
+    Route::post('/organizations/{organization}/projects/{project}/risk-cycles/{cycle}/links/{kind}/{resource}', [RiskTreatmentController::class, 'link'])->name('risks.links.store');
+    Route::delete('/organizations/{organization}/projects/{project}/risk-cycles/{cycle}/links/{kind}/{resource}', [RiskTreatmentController::class, 'unlink'])->name('risks.links.destroy');
+    Route::post('/organizations/{organization}/projects/{project}/risk-cycles/{cycle}/decisions', [RiskDecisionController::class, 'store'])->name('risks.decisions.store');
+    Route::post('/organizations/{organization}/projects/{project}/risk-cycles/{cycle}/complete', [RiskAnalysisController::class, 'complete'])->name('risks.cycles.complete');
+
+    Route::post('/risk-methodologies/{version}/clone', [RiskMethodologyController::class, 'clone'])->name('risk-methodologies.clone');
+    Route::put('/risk-methodologies/{version}/draft', [RiskMethodologyController::class, 'update'])->name('risk-methodologies.draft.update');
+    Route::post('/risk-methodologies/{version}/publish', [RiskMethodologyController::class, 'publish'])->name('risk-methodologies.publish');
+    Route::post('/threat-catalogs/{version}/clone', [ThreatCatalogController::class, 'clone'])->name('threat-catalogs.clone');
+    Route::put('/threat-catalogs/{version}/draft', [ThreatCatalogController::class, 'update'])->name('threat-catalogs.draft.update');
+    Route::post('/threat-catalogs/{version}/publish', [ThreatCatalogController::class, 'publish'])->name('threat-catalogs.publish');
 
     Route::post('/organizations/{organization}/projects/{project}/processes', [BusinessProcessController::class, 'store'])->name('processes.store');
     Route::put('/organizations/{organization}/projects/{project}/processes/{process}', [BusinessProcessController::class, 'update'])->name('processes.update');
