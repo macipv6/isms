@@ -9,6 +9,7 @@ use App\Models\ProjectThreat;
 use App\Models\RiskAnalysisTrigger;
 use App\Models\User;
 use App\Policies\ProjectRiskPolicy;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
 
@@ -24,15 +25,30 @@ abstract class RiskFormRequest extends FormRequest
                 $class::query()->where('project_id', $project->id)->findOrFail($id);
             }
         }
-        $triggerIds = $this->input('trigger_ids');
-        if (is_array($triggerIds) && count($triggerIds) <= 100) {
-            $ids = array_values(array_unique(array_filter($triggerIds, fn (mixed $id): bool => is_string($id) && Str::isUuid($id))));
-            if ($ids !== [] && RiskAnalysisTrigger::query()->where('project_id', $project->id)->whereIn('id', $ids)->count() !== count($ids)) {
-                abort(404);
-            }
+        $authorized = $user instanceof User && app(ProjectRiskPolicy::class)->write($user, $project);
+        if (! $authorized) {
+            $this->assertScopedTriggerIds($project);
         }
 
-        return $user instanceof User && app(ProjectRiskPolicy::class)->write($user, $project);
+        return $authorized;
+    }
+
+    protected function failedValidation(Validator $validator): void
+    {
+        $this->assertScopedTriggerIds($this->project());
+        parent::failedValidation($validator);
+    }
+
+    private function assertScopedTriggerIds(IsmsProject $project): void
+    {
+        $triggerIds = $this->input('trigger_ids');
+        if (! is_array($triggerIds) || count($triggerIds) > 100) {
+            return;
+        }
+        $ids = array_values(array_unique(array_filter($triggerIds, fn (mixed $id): bool => is_string($id) && Str::isUuid($id))));
+        if ($ids !== [] && RiskAnalysisTrigger::query()->where('project_id', $project->id)->whereIn('id', $ids)->count() !== count($ids)) {
+            abort(404);
+        }
     }
 
     protected function project(): IsmsProject

@@ -13,6 +13,7 @@ use App\Models\RiskAnalysisTrigger;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use App\Services\ProtectionNeeds\ProtectionNeedAccess;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
@@ -45,10 +46,11 @@ class RiskAnalysisWorkflow
             if (count($triggerIds) !== count(array_unique($triggerIds))) {
                 throw ValidationException::withMessages(['triggers' => 'Auslöser dürfen nicht mehrfach verknüpft werden.']);
             }
-            foreach ($triggerIds as $id) {
-                if (! RiskAnalysisTrigger::query()->whereKey($id)->where('project_id', $project->id)->where($column, $target->id)->whereIn('status', ['open', 'covered'])->exists()) {
-                    throw ValidationException::withMessages(['triggers' => 'Ein Auslöser gehört nicht zum aktuellen Projektziel.']);
-                }
+            if (count($triggerIds) > 100) {
+                throw ValidationException::withMessages(['triggers' => 'Höchstens 100 Auslöser sind erlaubt.']);
+            }
+            if ($triggerIds !== [] && RiskAnalysisTrigger::query()->where('project_id', $project->id)->where($column, $target->id)->whereIn('status', ['open', 'covered'])->whereIn('id', $triggerIds)->count() !== count($triggerIds)) {
+                throw (new ModelNotFoundException)->setModel(RiskAnalysisTrigger::class, $triggerIds);
             }
             $analysis = RiskAnalysis::query()->create(['project_id' => $project->id, $column => $target->id, 'project_threat_id' => $threat->id, 'scenario_identity' => $identity]);
             $cycle = $analysis->cycles()->create(['project_id' => $project->id, 'cycle_number' => 1, ...$fields, 'status' => RiskCycleStatus::Draft, 'is_current' => true, 'needs_review' => false, 'lock_version' => 0, 'created_by' => $actor->id, 'updated_by' => $actor->id]);

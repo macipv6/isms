@@ -54,11 +54,52 @@ class RiskHttpWorkflowTest extends TestCase
 
         $this->actingAs($actor)->post($url, [...$payload, 'trigger_ids' => array_map(fn (): string => (string) Str::uuid(), range(1, 101))])
             ->assertSessionHasErrors(['trigger_ids' => 'Dieses Feld ist zu lang.']);
-        $this->assertLessThanOrEqual(2, $triggerQueries);
+        $this->assertSame(0, $triggerQueries);
 
         $trigger = app(RiskTriggerEvaluator::class)->register($project, $target, RiskTriggerType::Manual, 'Prüfhinweis', $actor);
         $this->actingAs($actor)->post($url, [...$payload, 'trigger_ids' => [$trigger->id, $trigger->id]])
             ->assertSessionHasErrors('trigger_ids.0');
+    }
+
+    public function test_trigger_lookup_query_count_stays_constant_for_fifty_and_one_hundred_ids(): void
+    {
+        [$project, $target, $actor, $context] = $this->riskTarget();
+        $url = "/organizations/{$project->organization_id}/projects/{$project->id}/risks/targets/process/{$target->id}/analyses";
+        $ids = array_map(fn (): string => (string) Str::uuid(), range(1, 100));
+        DB::table('risk_analysis_triggers')->insert(array_map(fn (string $id): array => [
+            'id' => $id, 'project_id' => $project->id, 'business_process_id' => $target->id,
+            'type' => 'manual', 'source_identity' => $id, 'rationale' => 'Prüfhinweis',
+            'status' => 'open', 'created_by' => $actor->id, 'created_at' => now(), 'updated_at' => now(),
+        ], $ids));
+        $triggerSelects = 0;
+        $linkedIds = [];
+        DB::listen(function ($query) use (&$triggerSelects, &$linkedIds, $ids): void {
+            if (str_starts_with(strtolower(ltrim($query->sql)), 'select') && str_contains($query->sql, 'risk_analysis_triggers')) {
+                $triggerSelects++;
+            }
+            if (str_starts_with(strtolower(ltrim($query->sql)), 'insert') && str_contains($query->sql, 'risk_analysis_trigger_links')) {
+                foreach ($query->bindings as $binding) {
+                    if (is_string($binding) && in_array($binding, $ids, true)) {
+                        $linkedIds[] = $binding;
+                    }
+                }
+            }
+        });
+
+        foreach ([50, 100] as $count) {
+            $triggerSelects = 0;
+            $linkedIds = [];
+            $requestedIds = array_reverse(array_slice($ids, 0, $count));
+            $this->actingAs($actor)->post($url, [
+                'threat_id' => $context->projectThreats()->firstOrFail()->id,
+                'trigger_ids' => $requestedIds,
+                'title' => "Batchtest {$count}", 'cause' => 'Ursache', 'event' => 'Ereignis', 'impact' => 'Folge',
+                'confidentiality' => false, 'integrity' => false, 'availability' => true,
+            ])->assertSessionHasNoErrors();
+            $this->assertSame(1, $triggerSelects, "{$count} Auslöser verursachten {$triggerSelects} Trigger-SELECTs.");
+            $this->assertSame($requestedIds, $linkedIds);
+            $this->assertDatabaseHas('risk_analysis_trigger_links', ['risk_analysis_trigger_id' => $ids[0]]);
+        }
     }
 
     public function test_invalid_treatment_enum_has_a_german_field_error(): void

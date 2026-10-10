@@ -17,9 +17,7 @@ class StoreRiskAnalysisRequest extends RiskFormRequest
             'event' => ['required', 'string', 'max:10000'], 'impact' => ['required', 'string', 'max:10000'],
             'confidentiality' => ['required', 'boolean'], 'integrity' => ['required', 'boolean'], 'availability' => ['required', 'boolean'],
             'trigger_ids' => ['sometimes', 'array', 'max:100'],
-            'trigger_ids.*' => is_array($this->input('trigger_ids')) && count($this->input('trigger_ids')) > 100
-                ? []
-                : ['required', 'uuid', 'distinct', Rule::exists('risk_analysis_triggers', 'id')->where('project_id', $projectId)],
+            'trigger_ids.*' => ['required', 'uuid', 'distinct'],
         ];
     }
 }

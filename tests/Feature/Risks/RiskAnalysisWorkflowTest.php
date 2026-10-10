@@ -15,6 +15,7 @@ use App\Services\Risks\RiskAssessmentService;
 use App\Services\Risks\RiskChangeInvalidator;
 use App\Services\Risks\RiskTriggerEvaluator;
 use App\Services\Threats\ThreatOverviewService;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -76,6 +77,21 @@ class RiskAnalysisWorkflowTest extends TestCase
         $threat = $context->projectThreats()->firstOrFail();
         $this->expectException(ValidationException::class);
         app(RiskAnalysisWorkflow::class)->create($project, $target, $threat, $this->scenario(), [$trigger->id, $trigger->id], $actor);
+    }
+
+    public function test_direct_create_rejects_foreign_trigger_id_before_writing(): void
+    {
+        [$project, $target, $actor, $context] = $this->riskTarget();
+        [$foreignProject, $foreignTarget, $foreignActor] = $this->riskTarget();
+        $foreignTrigger = app(RiskTriggerEvaluator::class)->register($foreignProject, $foreignTarget, RiskTriggerType::Manual, 'Fremder Hinweis', $foreignActor);
+
+        try {
+            app(RiskAnalysisWorkflow::class)->create($project, $target, $context->projectThreats()->firstOrFail(), $this->scenario(), [$foreignTrigger->id], $actor);
+            $this->fail('Fremder Auslöser wurde übernommen.');
+        } catch (ModelNotFoundException) {
+            $this->assertDatabaseCount('risk_analyses', 0);
+            $this->assertDatabaseCount('risk_analysis_trigger_links', 0);
+        }
     }
 
     public function test_applicable_threat_requires_a_current_non_stale_cycle_for_overview(): void
