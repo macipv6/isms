@@ -28,7 +28,7 @@ final class RiskRouteScope
         'need' => ProtectionNeed::class, 'downgrade' => ProtectionNeedDowngradeRequest::class,
         'context' => ProjectRiskContext::class, 'threat' => ProjectThreat::class,
         'trigger' => RiskAnalysisTrigger::class, 'review' => RiskTargetThreatReview::class,
-        'analysis' => RiskAnalysis::class, 'cycle' => RiskAnalysisCycle::class,
+        'analysis' => RiskAnalysis::class, 'cycle' => RiskAnalysisCycle::class, 'finding' => Finding::class,
     ];
 
     /** @return array{Organization, IsmsProject} */

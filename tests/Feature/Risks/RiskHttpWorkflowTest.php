@@ -2,16 +2,64 @@
 
 namespace Tests\Feature\Risks;
 
+use App\Enums\RiskTriggerType;
 use App\Models\RiskAnalysisCycle;
 use App\Models\RiskAnalysisTrigger;
 use App\Services\Risks\RiskAnalysisWorkflow;
+use App\Services\Risks\RiskTriggerEvaluator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class RiskHttpWorkflowTest extends TestCase
 {
     use InteractsWithRiskTargets;
     use RefreshDatabase;
+
+    public function test_voluntary_analysis_accepts_missing_and_empty_trigger_lists(): void
+    {
+        [$project, $target, $actor, $context] = $this->riskTarget();
+        $url = "/organizations/{$project->organization_id}/projects/{$project->id}/risks/targets/process/{$target->id}/analyses";
+        $payload = [
+            'threat_id' => $context->projectThreats()->firstOrFail()->id,
+            'title' => 'Freiwillige Analyse', 'cause' => 'Ursache', 'event' => 'Ereignis', 'impact' => 'Folge',
+            'confidentiality' => false, 'integrity' => false, 'availability' => true,
+        ];
+        $mandatory = app(RiskTriggerEvaluator::class)->register($project, $target, RiskTriggerType::NonstandardScenario, 'Abweichendes Szenario', $actor);
+
+        $this->actingAs($actor)->post($url, $payload)->assertSessionHasNoErrors();
+        $this->actingAs($actor)->post($url, [...$payload, 'title' => 'Zweite freiwillige Analyse', 'trigger_ids' => []])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseCount('risk_analysis_cycles', 2);
+        $this->assertDatabaseCount('risk_analysis_trigger_links', 0);
+        $this->assertSame('open', $mandatory->fresh()->status->value);
+    }
+
+    public function test_oversized_trigger_list_is_rejected_without_per_id_lookup_and_duplicates_are_rejected(): void
+    {
+        [$project, $target, $actor, $context] = $this->riskTarget();
+        $url = "/organizations/{$project->organization_id}/projects/{$project->id}/risks/targets/process/{$target->id}/analyses";
+        $payload = [
+            'threat_id' => $context->projectThreats()->firstOrFail()->id,
+            'title' => 'Grenztest', 'cause' => 'Ursache', 'event' => 'Ereignis', 'impact' => 'Folge',
+            'confidentiality' => false, 'integrity' => false, 'availability' => true,
+        ];
+        $triggerQueries = 0;
+        DB::listen(function ($query) use (&$triggerQueries): void {
+            if (str_contains($query->sql, 'risk_analysis_triggers')) {
+                $triggerQueries++;
+            }
+        });
+
+        $this->actingAs($actor)->post($url, [...$payload, 'trigger_ids' => array_map(fn (): string => (string) Str::uuid(), range(1, 101))])
+            ->assertSessionHasErrors(['trigger_ids' => 'Dieses Feld ist zu lang.']);
+        $this->assertLessThanOrEqual(2, $triggerQueries);
+
+        $trigger = app(RiskTriggerEvaluator::class)->register($project, $target, RiskTriggerType::Manual, 'Prüfhinweis', $actor);
+        $this->actingAs($actor)->post($url, [...$payload, 'trigger_ids' => [$trigger->id, $trigger->id]])
+            ->assertSessionHasErrors('trigger_ids.0');
+    }
 
     public function test_invalid_treatment_enum_has_a_german_field_error(): void
     {

@@ -4,6 +4,7 @@ namespace App\Services\Risks;
 
 use App\Data\Dependencies\DependencyNode;
 use App\Enums\DependencyNodeType;
+use App\Enums\FindingStatus;
 use App\Models\Finding;
 use App\Models\FindingAssetLink;
 use App\Models\FindingProcessLink;
@@ -24,6 +25,9 @@ class FindingRiskTargetService
             $actor = $this->access->writer($actor);
             $finding = Finding::query()->lockForUpdate()->findOrFail($finding->id);
             $project = $this->access->project(IsmsProject::query()->findOrFail($finding->project_id));
+            if (! in_array($finding->status, [FindingStatus::Proposed, FindingStatus::Accepted], true)) {
+                throw ValidationException::withMessages(['finding' => 'Nur offene oder akzeptierte Funde können mit einem Risikoziel verknüpft werden.']);
+            }
             if ($target->projectId !== $project->id) {
                 throw ValidationException::withMessages(['target' => 'Das Ziel gehört nicht zu diesem Projekt.']);
             }

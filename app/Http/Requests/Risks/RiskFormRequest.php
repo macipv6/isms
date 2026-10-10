@@ -25,11 +25,10 @@ abstract class RiskFormRequest extends FormRequest
             }
         }
         $triggerIds = $this->input('trigger_ids');
-        if (is_array($triggerIds)) {
-            foreach ($triggerIds as $id) {
-                if (is_string($id) && Str::isUuid($id)) {
-                    RiskAnalysisTrigger::query()->where('project_id', $project->id)->findOrFail($id);
-                }
+        if (is_array($triggerIds) && count($triggerIds) <= 100) {
+            $ids = array_values(array_unique(array_filter($triggerIds, fn (mixed $id): bool => is_string($id) && Str::isUuid($id))));
+            if ($ids !== [] && RiskAnalysisTrigger::query()->where('project_id', $project->id)->whereIn('id', $ids)->count() !== count($ids)) {
+                abort(404);
             }
         }
 

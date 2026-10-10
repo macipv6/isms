@@ -26,12 +26,12 @@ class RiskAnalysisController extends RiskController
         Gate::authorize('create', [RiskAnalysisCycle::class, $project]);
         $data = $request->validated();
         $threat = ProjectThreat::query()->where('project_id', $project->id)->findOrFail($data['threat_id']);
-        foreach ($data['trigger_ids'] as $id) {
+        foreach ($data['trigger_ids'] ?? [] as $id) {
             $trigger = RiskAnalysisTrigger::query()->where('project_id', $project->id)->findOrFail($id);
             abort_unless(($trigger->business_process_id ?? $trigger->asset_id) === $target->id, 404);
         }
         $scenario = array_intersect_key($data, array_flip(['title', 'cause', 'event', 'impact', 'confidentiality', 'integrity', 'availability']));
-        $service->create($project, $target, $threat, $scenario, $data['trigger_ids'], $this->actor($request));
+        $service->create($project, $target, $threat, $scenario, $data['trigger_ids'] ?? [], $this->actor($request));
 
         return back()->with('success', 'Risikoanalyse angelegt.');
     }

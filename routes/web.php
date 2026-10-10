@@ -14,6 +14,7 @@ use App\Http\Controllers\EvidenceController;
 use App\Http\Controllers\EvidenceRegisterController;
 use App\Http\Controllers\FindingController;
 use App\Http\Controllers\FindingRegisterController;
+use App\Http\Controllers\FindingRiskTargetController;
 use App\Http\Controllers\IsmsProjectController;
 use App\Http\Controllers\MeasureController;
 use App\Http\Controllers\MeasureRegisterController;
@@ -75,6 +76,7 @@ Route::middleware(['auth', 'active-user'])->group(function (): void {
     Route::post('/organizations/{organization}/projects/{project}/downgrades/{downgrade}/decision', [ProtectionNeedDowngradeController::class, 'decide'])->name('protection-needs.downgrades.decide');
 
     Route::post('/organizations/{organization}/projects/{project}/risks/context', [ProjectRiskContextController::class, 'initialize'])->name('risks.context.initialize');
+    Route::post('/organizations/{organization}/projects/{project}/risks/findings/{finding}/targets/{targetType}/{target}', [FindingRiskTargetController::class, 'store'])->name('risks.findings.targets.store');
     Route::post('/organizations/{organization}/projects/{project}/risks/context/{context}/migrate', [ProjectRiskContextController::class, 'migrate'])->name('risks.context.migrate');
     Route::post('/organizations/{organization}/projects/{project}/risks/targets/{targetType}/{target}/triggers', [RiskTriggerController::class, 'store'])->name('risks.triggers.store');
     Route::post('/organizations/{organization}/projects/{project}/risks/triggers/{trigger}/dismiss', [RiskTriggerController::class, 'dismiss'])->name('risks.triggers.dismiss');
