@@ -3,6 +3,7 @@ import { useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import RiskAssessmentForm from './RiskAssessmentForm.vue';
 import RiskTreatmentForm from './RiskTreatmentForm.vue';
+import RiskTreatmentDetails from './RiskTreatmentDetails.vue';
 import RiskDecisionForm from './RiskDecisionForm.vue';
 import RiskFormFeedback from './RiskFormFeedback.vue';
 import type {
@@ -68,12 +69,16 @@ const blockers = computed(() => props.cycle.completionBlockers);
         </p>
         <RiskAssessmentForm
             v-if="cycle.status === 'draft'"
-            :key="`${cycle.id}-inherent-${cycle.lockVersion}`"
+            :key="`${cycle.id}-inherent`"
             :url="`${prefix}/assessments`"
             :cycle="cycle"
             :methodology="methodology"
             phase="inherent"
             :can-write="writable"
+        />
+        <RiskTreatmentDetails
+            v-if="cycle.treatment"
+            :treatment="cycle.treatment"
         />
         <RiskTreatmentForm
             v-if="
@@ -83,6 +88,7 @@ const blockers = computed(() => props.cycle.completionBlockers);
             "
             :url="`${prefix}/treatment`"
             :resources="resources"
+            :treatment="cycle.treatment"
             :can-write="writable"
         />
         <section v-for="kind in kinds" :key="kind" class="my-3">
@@ -130,7 +136,7 @@ const blockers = computed(() => props.cycle.completionBlockers);
         <RiskFormFeedback :errors="links.errors" />
         <RiskAssessmentForm
             v-if="cycle.status === 'treatment_in_progress'"
-            :key="`${cycle.id}-residual-${cycle.lockVersion}`"
+            :key="`${cycle.id}-residual`"
             :url="`${prefix}/assessments`"
             :cycle="cycle"
             :methodology="methodology"

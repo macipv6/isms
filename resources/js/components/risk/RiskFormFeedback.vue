@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
 defineProps<{ errors: Record<string, string>; success?: boolean }>();
+const emit = defineEmits<{ refreshed: [] }>();
+function refresh(): void {
+    router.reload({ onSuccess: () => emit('refreshed') });
+}
 </script>
 <template>
     <div
@@ -15,7 +19,7 @@ defineProps<{ errors: Record<string, string>; success?: boolean }>();
             v-if="errors.cycle"
             type="button"
             class="underline"
-            @click="router.reload()"
+            @click="refresh"
         >
             Aktuellen Stand laden
         </button>

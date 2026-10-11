@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
 import RiskFormFeedback from './RiskFormFeedback.vue';
+import { useAssessmentVersion } from './useAssessmentVersion';
 import type { MethodologyVersion, RiskCycle } from '@/types/risk';
 const props = defineProps<{
     url: string;
@@ -16,9 +17,14 @@ const form = useForm({
     rationale: '',
     lock_version: props.cycle.lockVersion,
 });
+const version = useAssessmentVersion(() => props.cycle.lockVersion, form);
 </script>
 <template>
-    <form @submit.prevent="form.post(url, { preserveScroll: true })">
+    <form
+        @submit.prevent="
+            form.post(url, { preserveScroll: true, onSuccess: version.saved })
+        "
+    >
         <h3 class="my-3 text-lg font-semibold">
             {{ phase === 'inherent' ? 'Inhärente Bewertung' : 'Restbewertung' }}
         </h3>
@@ -71,6 +77,7 @@ const form = useForm({
         <RiskFormFeedback
             :errors="form.errors"
             :success="form.recentlySuccessful"
+            @refreshed="version.refreshed"
         />
     </form>
 </template>

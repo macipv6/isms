@@ -96,10 +96,16 @@ const kinds = ['frequency', 'impact', 'risk'] as const;
         <template v-if="canPublish && version.status === 'draft'">
             <form
                 @submit.prevent="
-                    draft.put(`${base}/draft`, { preserveScroll: true })
+                    draft.put(`${base}/draft`, {
+                        preserveScroll: true,
+                        onSuccess: () => draft.defaults(),
+                    })
                 "
             >
-                <fieldset :disabled="draft.processing" class="grid gap-3">
+                <fieldset
+                    :disabled="draft.processing || publish.processing"
+                    class="grid gap-3"
+                >
                     <section v-for="kind in kinds" :key="kind">
                         <h3 class="my-3 font-semibold">{{ kind }}</h3>
                         <div
@@ -188,7 +194,9 @@ const kinds = ['frequency', 'impact', 'risk'] as const;
             </form>
             <button
                 type="button"
-                :disabled="publish.processing || draft.isDirty"
+                :disabled="
+                    publish.processing || draft.processing || draft.isDirty
+                "
                 @click="
                     publish.post(`${base}/publish`, { preserveScroll: true })
                 "

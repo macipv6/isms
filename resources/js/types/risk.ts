@@ -170,6 +170,15 @@ export interface RiskResource {
 }
 export type RiskResourceKind = 'finding' | 'measure' | 'evidence';
 export type RiskResources = Record<RiskResourceKind, RiskResource[]>;
+export interface RiskTreatment {
+    id: string;
+    action: string;
+    rationale: string;
+    counterparty_name: string;
+    counterparty_email: string;
+    cessation_statement: string;
+    cessation_evidence_id: string | null;
+}
 export interface RiskCycle {
     completionBlockers: string[];
     id: string;
@@ -187,7 +196,7 @@ export interface RiskCycle {
     lockVersion: number;
     cycleNumber: number;
     residualLevel: string | null;
-    treatment: { id: string; action: string } | null;
+    treatment: RiskTreatment | null;
     decisionRequired: boolean;
     canDecideInternal: boolean;
     canDecideExternal: boolean;

@@ -22,8 +22,14 @@ const draft = useForm<CatalogEntry>({
     source_reference: '',
 });
 function edit(entry: CatalogEntry): void {
+    if (draft.isDirty || draft.processing || publish.processing) return;
     Object.assign(draft, entry);
+    draft.defaults({ ...entry });
     draft.clearErrors();
+}
+function publishSaved(): void {
+    if (draft.isDirty || draft.processing || publish.processing) return;
+    publish.post(`${base}/publish`, { preserveScroll: true });
 }
 </script>
 <template>
@@ -78,6 +84,11 @@ function edit(entry: CatalogEntry): void {
                             <button
                                 v-if="canPublish && version.status === 'draft'"
                                 type="button"
+                                :disabled="
+                                    draft.isDirty ||
+                                    draft.processing ||
+                                    publish.processing
+                                "
                                 @click="edit(entry)"
                             >
                                 Bearbeiten
@@ -98,10 +109,16 @@ function edit(entry: CatalogEntry): void {
         <template v-if="canPublish && version.status === 'draft'"
             ><form
                 @submit.prevent="
-                    draft.put(`${base}/draft`, { preserveScroll: true })
+                    draft.put(`${base}/draft`, {
+                        preserveScroll: true,
+                        onSuccess: () => draft.defaults(),
+                    })
                 "
             >
-                <fieldset :disabled="draft.processing" class="my-4 grid gap-3">
+                <fieldset
+                    :disabled="draft.processing || publish.processing"
+                    class="my-4 grid gap-3"
+                >
                     <legend>Entwurfseintrag ergänzen oder ändern</legend>
                     <label
                         >Code
@@ -160,13 +177,17 @@ function edit(entry: CatalogEntry): void {
             </form>
             <button
                 type="button"
-                :disabled="publish.processing"
-                @click="
-                    publish.post(`${base}/publish`, { preserveScroll: true })
+                :disabled="
+                    publish.processing || draft.processing || draft.isDirty
                 "
+                @click="publishSaved"
             >
-                Gespeicherten Katalog veröffentlichen</button
-            ><RiskFormFeedback :errors="publish.errors"
+                Gespeicherten Katalog veröffentlichen
+            </button>
+            <p v-if="draft.isDirty">
+                Änderungen vor Veröffentlichung oder Eintragswechsel speichern.
+            </p>
+            <RiskFormFeedback :errors="publish.errors"
         /></template>
     </article>
 </template>

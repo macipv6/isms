@@ -34,6 +34,7 @@ class RiskWorkspacePageTest extends TestCase
             ->has('targets.0.reviews')->has('methodologies.0.cells', 16)
             ->where('cycles.data.0.id', $cycle->id)->where('cycles.data.0.decisionRequired', true)
             ->where('cycles.data.0.canDecideInternal', false)->where('cycles.data.0.canDecideExternal', true)
+            ->where('cycles.data.0.treatment.rationale', 'Ausgangswert bleibt')
             ->has('cycles.data.0.assessments', 2)->has('cycles.data.0.completionBlockers', 1)
             ->missing('resources.evidence.0.storage_path')->missing('resources.evidence.0.sha256'));
         $this->assertStringNotContainsString('private-cause', $response->getContent());
@@ -43,5 +44,43 @@ class RiskWorkspacePageTest extends TestCase
         $this->actingAs($actor)->get($url)->assertInertia(fn (Assert $page) => $page
             ->where('capabilities.write', false)->where('cycles.data.0.canDecideExternal', false)
             ->has('cycles.data.0.assessments', 2));
+    }
+
+    public function test_read_only_history_exposes_saved_transfer_and_cessation_details_without_evidence_metadata(): void
+    {
+        [$project, $cycle, $actor, $target] = $this->assessedCycle('rare', 'limited');
+        app(RiskTreatmentWorkflow::class)->select($cycle, RiskTreatmentAction::Transfer, [
+            'rationale' => 'Vertrag deckt Ausfall', 'counterparty_name' => 'Vertragspartner',
+            'counterparty_email' => 'kontakt@example.test',
+        ], $actor);
+        $proof = EvidenceFile::factory()->for($project, 'project')->create([
+            'status' => 'verified', 'reviewed_by' => $actor->id, 'reviewed_at' => now(),
+            'storage_path' => 'private/cessation-secret.pdf', 'sha256' => str_repeat('c', 64),
+        ]);
+        $threat = \App\Models\ProjectThreat::query()->where('project_id', $project->id)->firstOrFail();
+        $avoided = app(\App\Services\Risks\RiskAnalysisWorkflow::class)->create($project, $target, $threat, [
+            'title' => 'Stilllegung', 'cause' => 'Altbetrieb', 'event' => 'Ausfall', 'impact' => 'Unterbrechung',
+            'confidentiality' => false, 'integrity' => false, 'availability' => true,
+        ], [], $actor);
+        app(RiskAssessmentService::class)->assessInherent($avoided, 'rare', 'limited', 'Ausgangslage', $actor, 0);
+        app(RiskTreatmentWorkflow::class)->select($avoided->fresh(), RiskTreatmentAction::Avoid, [
+            'rationale' => 'Betrieb eingestellt', 'cessation_statement' => 'Dienst wurde stillgelegt',
+            'cessation_evidence_id' => $proof->id,
+        ], $actor);
+        $project->update(['status' => ProjectStatus::Completed]);
+        $response = $this->actingAs($actor)->get("/organizations/{$project->organization_id}/projects/{$project->id}/risks");
+        $response->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->where('capabilities.write', false)
+            ->where('cycles.data', function ($rows) use ($proof): bool {
+                $treatments = collect($rows)->pluck('treatment')->keyBy('action');
+
+                return $treatments['transfer']['rationale'] === 'Vertrag deckt Ausfall'
+                    && $treatments['transfer']['counterparty_name'] === 'Vertragspartner'
+                    && $treatments['transfer']['counterparty_email'] === 'kontakt@example.test'
+                    && $treatments['avoid']['cessation_statement'] === 'Dienst wurde stillgelegt'
+                    && $treatments['avoid']['cessation_evidence_id'] === $proof->id;
+            }));
+        $this->assertStringNotContainsString('private/cessation-secret.pdf', $response->getContent());
+        $this->assertStringNotContainsString(str_repeat('c', 64), $response->getContent());
     }
 }

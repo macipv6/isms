@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { RiskCycle } from '@/types/risk';
+import RiskTreatmentDetails from './RiskTreatmentDetails.vue';
 defineProps<{ cycles: RiskCycle[] }>();
 </script>
 <template>
@@ -15,6 +16,10 @@ defineProps<{ cycles: RiskCycle[] }>();
                 {{ cycle.status }}
                 {{ cycle.needsReview ? '· Erneute Prüfung erforderlich' : '' }}
             </summary>
+            <RiskTreatmentDetails
+                v-if="cycle.treatment"
+                :treatment="cycle.treatment"
+            />
             <p>Ursache: {{ cycle.cause }}</p>
             <p>Ereignis: {{ cycle.event }}</p>
             <p>Auswirkung: {{ cycle.impact }}</p>

@@ -1,19 +1,32 @@
 <script setup lang="ts">
 import { useForm } from '@inertiajs/vue3';
 import RiskFormFeedback from './RiskFormFeedback.vue';
-import type { RiskResources } from '@/types/risk';
-defineProps<{ url: string; resources: RiskResources; canWrite: boolean }>();
+import type { RiskResources, RiskTreatment } from '@/types/risk';
+const props = defineProps<{
+    url: string;
+    resources: RiskResources;
+    canWrite: boolean;
+    treatment: RiskTreatment | null;
+}>();
 const form = useForm({
-    action: 'reduce',
-    rationale: '',
-    counterparty_name: '',
-    counterparty_email: '',
-    cessation_statement: '',
-    cessation_evidence_id: '',
+    action: props.treatment?.action ?? 'reduce',
+    rationale: props.treatment?.rationale ?? '',
+    counterparty_name: props.treatment?.counterparty_name ?? '',
+    counterparty_email: props.treatment?.counterparty_email ?? '',
+    cessation_statement: props.treatment?.cessation_statement ?? '',
+    cessation_evidence_id: props.treatment?.cessation_evidence_id ?? '',
 });
 </script>
 <template>
-    <form @submit.prevent="form.post(url, { preserveScroll: true })">
+    <form
+        v-if="canWrite"
+        @submit.prevent="
+            form.post(url, {
+                preserveScroll: true,
+                onSuccess: () => form.defaults(),
+            })
+        "
+    >
         <h3 class="my-3 text-lg font-semibold">Behandlung</h3>
         <fieldset
             :disabled="!canWrite || form.processing"
@@ -58,6 +71,18 @@ const form = useForm({
                     >Stilllegungsnachweis
                     <select v-model="form.cessation_evidence_id" required>
                         <option value="">Bitte auswählen</option>
+                        <option
+                            v-if="
+                                form.cessation_evidence_id &&
+                                !resources.evidence.some(
+                                    (e) => e.id === form.cessation_evidence_id,
+                                )
+                            "
+                            :value="form.cessation_evidence_id"
+                        >
+                            Gespeicherter Nachweis
+                            {{ form.cessation_evidence_id }}
+                        </option>
                         <option
                             v-for="e in resources.evidence"
                             :key="e.id"
