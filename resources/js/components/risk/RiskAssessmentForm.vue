@@ -77,6 +77,7 @@ const version = useAssessmentVersion(() => props.cycle.lockVersion, form);
         <RiskFormFeedback
             :errors="form.errors"
             :success="form.recentlySuccessful"
+            :conflict="version.conflicted.value"
             @refreshed="version.refreshed"
         />
     </form>

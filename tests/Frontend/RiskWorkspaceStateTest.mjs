@@ -68,11 +68,28 @@ assert.equal(
     'A failed submission keeps its expected version',
 );
 assert.equal(assessment.form.errors.cycle, 'Zyklus wurde geändert');
+assert.equal(assessment.version.conflicted.value, true);
+assessment.form.clearErrors(); // A retry returns unrelated field validation.
+assessment.form.setError('rationale', 'Begründung prüfen');
+props.cycle.lockVersion = 7; // Another successful link mutation must not release the conflict.
+await nextTick();
+assert.equal(assessment.form.lock_version, 4);
+assert.equal(assessment.version.conflicted.value, true);
+assessment.version.saved();
+assert.equal(assessment.form.lock_version, 4);
 assessment.version.refreshed();
-assert.equal(assessment.form.lock_version, 6);
+assert.equal(assessment.form.lock_version, 7);
+assert.equal(assessment.version.conflicted.value, false);
 assert.equal(assessment.form.errors.cycle, undefined);
 assert.equal(assessment.form.errors.rationale, 'Begründung prüfen');
 assert.equal(assessment.form.rationale, 'Nicht gespeicherte Bewertung');
+props.cycle.lockVersion = 8;
+await nextTick();
+assert.equal(
+    assessment.form.lock_version,
+    8,
+    'Explicit refresh releases subsequent version synchronization',
+);
 
 const entry = {
     code: 'G.1',
