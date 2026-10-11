@@ -87,7 +87,7 @@ class ProtectionNeedPresenter
                     $previousIdentity = $identity;
                 }
                 $sourceRows[] = [
-                    'source' => ['type' => $sourceType, 'id' => $origin?->id, 'key' => $origin?->key ?? 'Unbekannt', 'name' => $origin?->name ?? 'Unbekannt'],
+                    'source' => ['type' => $sourceType, 'id' => $origin?->id, 'key' => $origin->key ?? 'Unbekannt', 'name' => $origin->name ?? 'Unbekannt'],
                     'level' => $source->origin_level->value,
                     'path' => $path,
                 ];
@@ -103,7 +103,7 @@ class ProtectionNeedPresenter
                 'id' => $need->id,
                 'targetType' => $targetType,
                 'targetId' => $targetId,
-                'target' => ['key' => $target?->key ?? 'Unbekannt', 'name' => $target?->name ?? 'Unbekannt', 'active' => (bool) ($target?->is_active ?? false)],
+                'target' => ['key' => $target->key ?? 'Unbekannt', 'name' => $target->name ?? 'Unbekannt', 'active' => (bool) ($target->is_active ?? false)],
                 'objective' => $need->objective->value,
                 'directLevel' => $need->direct_level?->value,
                 'inheritedLevel' => $need->inherited_level?->value,

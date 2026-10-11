@@ -68,13 +68,15 @@ class CatalogCsvImportTest extends TestCase
     {
         [$admin, $framework, $importer] = $this->setupImport();
         $batch = $importer->preview($admin, $framework->id, '2026.2', $this->csv());
+        $this->assertSame($batch->expires_at->getTimestamp(), $batch->fresh()->expires_at->getTimestamp());
         $other = User::factory()->create(['role' => UserRole::Admin]);
         $this->actingAs($other)->get('/assessment-catalogs/previews/'.$batch->id)->assertNotFound();
         $this->actingAs($other)->post('/assessment-catalogs/previews/'.$batch->id.'/confirm')->assertNotFound();
         $this->actingAs(User::factory()->create())->get('/assessment-catalogs')->assertForbidden();
         $this->actingAs($admin)->get('/assessment-catalogs/previews/00000000-0000-0000-0000-000000000000')->assertNotFound();
         $batch->update(['expires_at' => now()->subMinute()]);
-        $this->actingAs($admin)->post('/assessment-catalogs/previews/'.$batch->id.'/confirm')->assertSessionHasErrors('csv');
+        $this->assertTrue($batch->fresh()->expires_at->isPast());
+        $this->actingAs($admin)->post('/assessment-catalogs/previews/'.$batch->id.'/confirm')->assertRedirect()->assertSessionHasErrors('csv');
         $batch->update(['expires_at' => now()->addMinute()]);
         CatalogVersion::query()->create(['framework_id' => $framework->id, 'version' => '2026.2', 'status' => 'draft']);
         $this->actingAs($admin)->post('/assessment-catalogs/previews/'.$batch->id.'/confirm')->assertSessionHasErrors('version');
@@ -108,7 +110,9 @@ class CatalogCsvImportTest extends TestCase
     {
         [$admin, $framework, $importer] = $this->setupImport();
         $batch = $importer->preview($admin, $framework->id, '2026.2', $this->csv());
-        Event::listen('eloquent.creating: '.CatalogQuestion::class, function (): void { throw new \RuntimeException('Simulated write failure'); });
+        Event::listen('eloquent.creating: '.CatalogQuestion::class, function (): void {
+            throw new \RuntimeException('Simulated write failure');
+        });
         try {
             $importer->confirm($admin, $batch->id);
             $this->fail('Expected write failure');

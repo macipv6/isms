@@ -29,6 +29,9 @@ class RegisterImportBatch extends Model
 
     use HasUuids;
 
+    // PostgreSQL timestamptz must receive the application timezone offset.
+    protected $dateFormat = 'Y-m-d H:i:sP';
+
     protected $fillable = [
         'project_id', 'kind', 'created_by', 'sha256', 'payload', 'summary', 'status', 'expires_at', 'applied_at',
     ];

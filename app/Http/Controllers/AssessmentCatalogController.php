@@ -6,12 +6,15 @@ use App\Models\CatalogVersion;
 use App\Models\Framework;
 use App\Services\Assessment\CatalogCsvImporter;
 use App\Services\Assessment\CatalogCsvParser;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AssessmentCatalogController extends Controller
 {
-    public function index(Request $request, CatalogCsvImporter $importer)
+    public function index(Request $request, CatalogCsvImporter $importer): Response
     {
         $importer->authorize($request->user());
 
@@ -25,7 +28,7 @@ class AssessmentCatalogController extends Controller
         ]);
     }
 
-    public function template(Request $request, CatalogCsvImporter $importer)
+    public function template(Request $request, CatalogCsvImporter $importer): StreamedResponse
     {
         $importer->authorize($request->user());
 
@@ -38,7 +41,7 @@ class AssessmentCatalogController extends Controller
         }, 'fragekatalog-vorlage.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
-    public function preview(Request $request, CatalogCsvImporter $importer)
+    public function preview(Request $request, CatalogCsvImporter $importer): RedirectResponse
     {
         $importer->authorize($request->user());
         $data = $request->validate([
@@ -56,7 +59,7 @@ class AssessmentCatalogController extends Controller
         return redirect()->route('assessment-catalogs.preview.show', $batch->id);
     }
 
-    public function show(Request $request, string $batch, CatalogCsvImporter $importer)
+    public function show(Request $request, string $batch, CatalogCsvImporter $importer): Response
     {
         $batch = $importer->batch($request->user(), $batch);
         $rows = $batch->payload;
@@ -71,7 +74,7 @@ class AssessmentCatalogController extends Controller
         ]);
     }
 
-    public function confirm(Request $request, string $batch, CatalogCsvImporter $importer)
+    public function confirm(Request $request, string $batch, CatalogCsvImporter $importer): RedirectResponse
     {
         $importer->confirm($request->user(), $batch);
 

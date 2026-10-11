@@ -2,10 +2,22 @@
 
 namespace App\Services\Risks;
 
+use App\Enums\RiskCycleStatus;
+use App\Models\Asset;
+use App\Models\BusinessProcess;
+use App\Models\DependencyEdge;
+use App\Models\EvidenceFile;
+use App\Models\Finding;
 use App\Models\IsmsProject;
+use App\Models\Measure;
 use App\Models\ProjectRiskContext;
+use App\Models\ProtectionNeed;
+use App\Models\ProtectionNeedSource;
 use App\Models\RiskAnalysisCycle;
 use App\Models\RiskAnalysisTrigger;
+use App\Models\RiskMethodologyVersion;
+use App\Models\RiskTargetThreatReview;
+use App\Models\ThreatCatalogVersion;
 use App\Policies\ProjectRiskPolicy;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -17,7 +29,7 @@ class RiskRegisterPresenter
     {
         $filters = validator($request->query(), [
             'target_type' => ['nullable', Rule::in(['process', 'asset'])],
-            'status' => ['nullable', Rule::in(array_column(\App\Enums\RiskCycleStatus::cases(), 'value'))],
+            'status' => ['nullable', Rule::in(array_column(RiskCycleStatus::cases(), 'value'))],
             'stale' => ['nullable', Rule::in(['yes', 'no'])],
             'threat' => ['nullable', 'uuid'],
             'category' => ['nullable', Rule::in(['low', 'medium', 'high', 'very_high'])],
@@ -118,6 +130,7 @@ class RiskRegisterPresenter
         ];
     }
 
+    /** @return list<string> */
     private function blockers(RiskAnalysisCycle $cycle): array
     {
         $blockers = [];
@@ -129,15 +142,15 @@ class RiskRegisterPresenter
             $blockers[] = 'Eine Behandlung fehlt.';
         } elseif ($treatment->action->value === 'reduce') {
             $ids = $cycle->measureLinks->pluck('measure_id');
-            if ($ids->isEmpty() || \App\Models\Measure::query()->where('project_id', $cycle->project_id)->whereIn('id', $ids)->where('status', 'completed')->whereNotNull('completed_at')->whereNotNull('completed_by')->count() !== $ids->count()) {
+            if ($ids->isEmpty() || Measure::query()->where('project_id', $cycle->project_id)->whereIn('id', $ids)->where('status', 'completed')->whereNotNull('completed_at')->whereNotNull('completed_by')->count() !== $ids->count()) {
                 $blockers[] = 'Alle verknüpften Maßnahmen müssen wirksam abgeschlossen sein.';
             }
         } elseif ($treatment->action->value === 'transfer') {
-            if (trim((string) $treatment->counterparty_name) === '' || ! \App\Models\EvidenceFile::query()->where('project_id', $cycle->project_id)->whereIn('id', $cycle->evidenceLinks->pluck('evidence_id'))->where('status', 'verified')->exists()) {
+            if (trim((string) $treatment->counterparty_name) === '' || ! EvidenceFile::query()->where('project_id', $cycle->project_id)->whereIn('id', $cycle->evidenceLinks->pluck('evidence_id'))->where('status', 'verified')->exists()) {
                 $blockers[] = 'Übertragung benötigt einen Vertragspartner und geprüften Nachweis.';
             }
         } elseif ($treatment->action->value === 'avoid') {
-            if (trim((string) $treatment->cessation_statement) === '' || ! \App\Models\EvidenceFile::query()->where('project_id', $cycle->project_id)->whereKey($treatment->cessation_evidence_id)->where('status', 'verified')->whereNotNull('reviewed_by')->whereNotNull('reviewed_at')->exists()) {
+            if (trim((string) $treatment->cessation_statement) === '' || ! EvidenceFile::query()->where('project_id', $cycle->project_id)->whereKey($treatment->cessation_evidence_id)->where('status', 'verified')->whereNotNull('reviewed_by')->whereNotNull('reviewed_at')->exists()) {
                 $blockers[] = 'Ein aktueller geprüfter Stilllegungsnachweis fehlt.';
             }
         }
@@ -153,35 +166,39 @@ class RiskRegisterPresenter
         return $blockers;
     }
 
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
+     */
     private function workspace(IsmsProject $project, ?ProjectRiskContext $context, array $filters): array
     {
         $versions = app(RiskVersionPresenter::class);
-        $methodologies = \App\Models\RiskMethodologyVersion::query()->where('status', 'published')->orderByDesc('published_at')->limit(100)->get();
-        $catalogs = \App\Models\ThreatCatalogVersion::query()->where('status', 'published')->orderByDesc('published_at')->limit(100)->get();
+        $methodologies = RiskMethodologyVersion::query()->where('status', 'published')->orderByDesc('published_at')->limit(100)->get();
+        $catalogs = ThreatCatalogVersion::query()->where('status', 'published')->orderByDesc('published_at')->limit(100)->get();
         if ($context && ! $methodologies->contains('id', $context->methodology_version_id)) {
-            $methodologies->push(\App\Models\RiskMethodologyVersion::query()->findOrFail($context->methodology_version_id));
+            $methodologies->push(RiskMethodologyVersion::query()->findOrFail($context->methodology_version_id));
         }
         if ($context && ! $catalogs->contains('id', $context->catalog_version_id)) {
-            $catalogs->push(\App\Models\ThreatCatalogVersion::query()->findOrFail($context->catalog_version_id));
+            $catalogs->push(ThreatCatalogVersion::query()->findOrFail($context->catalog_version_id));
         }
         $targetPage = (int) ($filters['target_page'] ?? 1);
         $referencePage = (int) ($filters['reference_page'] ?? 1);
         $targetLastPage = 1;
         $referenceLastPage = 1;
         $targets = [];
-        foreach (['process' => \App\Models\BusinessProcess::class, 'asset' => \App\Models\Asset::class] as $type => $class) {
+        foreach (['process' => BusinessProcess::class, 'asset' => Asset::class] as $type => $class) {
             $targetQuery = $class::query()->where('project_id', $project->id);
             $targetLastPage = max($targetLastPage, (int) ceil($targetQuery->count() / 100));
             foreach ($targetQuery->orderBy('key')->offset(($targetPage - 1) * 100)->limit(100)->get() as $target) {
                 $column = $type === 'process' ? 'business_process_id' : 'asset_id';
                 $targets[] = ['id' => $target->id, 'type' => $type, 'key' => $target->key, 'name' => $target->name, 'active' => $target->is_active,
-                    'protectionNeeds' => \App\Models\ProtectionNeed::query()->where('project_id', $project->id)->where($column, $target->id)->with(['sources' => fn ($q) => $q->limit(20)])->get()->map(fn ($need) => ['objective' => $need->objective->value, 'level' => $need->effective_level?->value, 'needsReview' => $need->needs_review, 'sources' => $need->sources->map(fn ($source) => $this->source($project, $source, $target, $type))->all()])->all(),
-                    'reviews' => \App\Models\RiskTargetThreatReview::query()->where('project_id', $project->id)->where($column, $target->id)->get()->map(fn ($review) => ['id' => $review->id, 'threatId' => $review->project_threat_id, 'status' => $review->status->value, 'rationale' => $review->rationale])->all(),
+                    'protectionNeeds' => ProtectionNeed::query()->where('project_id', $project->id)->where($column, $target->id)->with(['sources' => fn ($q) => $q->limit(20)])->get()->map(fn ($need) => ['objective' => $need->objective->value, 'level' => $need->effective_level?->value, 'needsReview' => $need->needs_review, 'sources' => $need->sources->map(fn ($source) => $this->source($project, $source, $target, $type))->all()])->all(),
+                    'reviews' => RiskTargetThreatReview::query()->where('project_id', $project->id)->where($column, $target->id)->get()->map(fn ($review) => ['id' => $review->id, 'threatId' => $review->project_threat_id, 'status' => $review->status->value, 'rationale' => $review->rationale])->all(),
                 ];
             }
         }
         $resources = [];
-        foreach (['finding' => \App\Models\Finding::class, 'measure' => \App\Models\Measure::class, 'evidence' => \App\Models\EvidenceFile::class] as $kind => $class) {
+        foreach (['finding' => Finding::class, 'measure' => Measure::class, 'evidence' => EvidenceFile::class] as $kind => $class) {
             $resourceQuery = $class::query()->where('project_id', $project->id);
             $referenceLastPage = max($referenceLastPage, (int) ceil($resourceQuery->count() / 100));
             $resources[$kind] = $resourceQuery->orderByDesc('created_at')->orderBy('id')->offset(($referencePage - 1) * 100)->limit(100)->get()->map(fn ($resource) => ['id' => $resource->id, 'label' => $resource->title ?? $resource->original_name ?? $resource->id, 'status' => $resource->getRawOriginal('status')])->all();
@@ -196,16 +213,17 @@ class RiskRegisterPresenter
         ];
     }
 
-    private function source(IsmsProject $project, $source, $target, string $type): array
+    /** @return array{source_type: string, source_id: string, path: list<string>} */
+    private function source(IsmsProject $project, ProtectionNeedSource $source, BusinessProcess|Asset $target, string $type): array
     {
         $sourceType = $source->origin_process_id ? 'process' : 'asset';
-        $class = $sourceType === 'process' ? \App\Models\BusinessProcess::class : \App\Models\Asset::class;
+        $class = $sourceType === 'process' ? BusinessProcess::class : Asset::class;
         $origin = $class::query()->where('project_id', $project->id)->find($source->origin_process_id ?? $source->origin_asset_id);
-        $edge = \App\Models\DependencyEdge::query()->where('project_id', $project->id)->find($source->first_edge_id);
+        $edge = DependencyEdge::query()->where('project_id', $project->id)->find($source->first_edge_id);
         $nextType = $edge?->target_process_id ? 'process' : 'asset';
-        $nextClass = $nextType === 'process' ? \App\Models\BusinessProcess::class : \App\Models\Asset::class;
+        $nextClass = $nextType === 'process' ? BusinessProcess::class : Asset::class;
         $next = $edge ? $nextClass::query()->where('project_id', $project->id)->find($edge->target_process_id ?? $edge->target_asset_id) : null;
-        $path = [$origin?->key ?? 'Unbekannte Quelle'];
+        $path = [$origin->key ?? 'Unbekannte Quelle'];
         if ($next && ($next->id !== $origin?->id || $nextType !== $sourceType)) {
             $path[] = $next->key;
         }
@@ -214,6 +232,6 @@ class RiskRegisterPresenter
             $path[] = $target->key;
         }
 
-        return ['source_type' => $sourceType, 'source_id' => $origin?->id ?? '', 'path' => $path];
+        return ['source_type' => $sourceType, 'source_id' => $origin->id ?? '', 'path' => $path];
     }
 }

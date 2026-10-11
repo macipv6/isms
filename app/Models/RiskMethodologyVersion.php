@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\PublicationStatus;
+use Carbon\CarbonImmutable;
 use Database\Factories\RiskMethodologyVersionFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -10,7 +11,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-/** @property PublicationStatus $status */
+/**
+ * @property PublicationStatus $status
+ * @property CarbonImmutable|null $published_at
+ */
 class RiskMethodologyVersion extends Model
 {
     /** @use HasFactory<RiskMethodologyVersionFactory> */

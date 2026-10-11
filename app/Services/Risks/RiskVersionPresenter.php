@@ -7,6 +7,7 @@ use App\Models\ThreatCatalogVersion;
 
 class RiskVersionPresenter
 {
+    /** @return array<string, mixed> */
     public function methodology(RiskMethodologyVersion $version): array
     {
         $version->loadMissing(['methodology', 'frequencies', 'impacts', 'riskLevels', 'matrixCells.frequency', 'matrixCells.impact', 'matrixCells.riskLevel']);
@@ -24,6 +25,7 @@ class RiskVersionPresenter
         ];
     }
 
+    /** @return array<string, mixed> */
     public function catalog(ThreatCatalogVersion $version, bool $includeEntries = true, int $entryPage = 1): array
     {
         $version->loadMissing('catalog');

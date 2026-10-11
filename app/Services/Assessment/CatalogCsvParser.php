@@ -9,10 +9,14 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * @phpstan-type CatalogCsvRow array{category_key: string, category_name: string, category_description: string|null, category_sort_order: int|string, question_key: string, title: string, question_text: string, help_text: string|null, answer_type: string, severity: string, evidence_expected: string, is_active: string, sort_order: int|string, options_json: list<array{value: string, label: string, score: int|string|null, sort_order: int|string}>, rules_json: list<array{target_question_key: string, operator: string, action: string, expected_value: mixed}>}
+ */
 class CatalogCsvParser
 {
     public const HEADER = ['category_key', 'category_name', 'category_description', 'category_sort_order', 'question_key', 'title', 'question_text', 'help_text', 'answer_type', 'severity', 'evidence_expected', 'is_active', 'sort_order', 'options_json', 'rules_json'];
 
+    /** @return list<CatalogCsvRow> */
     public function parse(string $contents): array
     {
         if (strlen($contents) > 5 * 1024 * 1024 || ! mb_check_encoding($contents, 'UTF-8') || str_contains($contents, "\0")) {
@@ -127,6 +131,7 @@ class CatalogCsvParser
                             : is_array($expected) && array_is_list($expected) && count($expected) <= 100
                                 && collect($expected)->every(fn ($value) => is_string($value) && in_array($value, array_column($row['options_json'], 'value'), true))
                                 && count(array_unique($expected)) === count($expected),
+                        default => false,
                     };
                     if (! $valid || ($rule['operator'] === 'contains' && $row['answer_type'] !== 'multiple_choice')) {
                         $this->fail('Erwartungswert oder Operator passt nicht zum Antworttyp der auslösenden Frage.');
@@ -161,6 +166,7 @@ class CatalogCsvParser
                         $state = 'closed';
                     }
                 }
+
                 continue;
             }
             if ($char === $delimiter || $char === "\r" || $char === "\n") {
