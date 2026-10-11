@@ -59,11 +59,13 @@ class CatalogCsvParser
                     $this->safeText($row[$field], $line);
                 }
                 $category = array_intersect_key($row, array_flip(array_slice(self::HEADER, 0, 4)));
-                if (isset($categories[$row['category_key']]) && $categories[$row['category_key']] !== $category) {
+                $categoryIdentity = 'category:'.$row['category_key'];
+                if (isset($categories[$categoryIdentity]) && $categories[$categoryIdentity] !== $category) {
                     $this->fail("Datensatz {$line}: Kategorieangaben widersprechen sich.");
                 }
-                $categories[$row['category_key']] = $category;
-                if (isset($rows[$row['question_key']])) {
+                $categories[$categoryIdentity] = $category;
+                $questionIdentity = 'question:'.$row['question_key'];
+                if (isset($rows[$questionIdentity])) {
                     $this->fail("Datensatz {$line}: Frageschlüssel doppelt vorhanden.");
                 }
                 foreach (['options_json', 'rules_json'] as $field) {
@@ -86,20 +88,22 @@ class CatalogCsvParser
                         'value' => ['required', 'string', 'max:64'], 'label' => ['required', 'string', 'max:255'],
                         'score' => ['present', 'nullable', 'integer', 'min:-2147483648', 'max:2147483647'],
                         'sort_order' => ['required', 'integer', 'min:0', 'max:2147483647'],
-                    ])->fails() || array_diff(array_keys($option), ['value', 'label', 'score', 'sort_order']) || isset($seen[$option['value']])) {
+                    ])->fails() || array_diff(array_keys($option), ['value', 'label', 'score', 'sort_order']) || isset($seen['option:'.$option['value']])) {
                         $this->fail("Datensatz {$line}: ungültige oder doppelte Option.");
                     }
                     $this->safeText($option['value'], $line);
                     $this->safeText($option['label'], $line);
-                    $seen[$option['value']] = true;
+                    $seen['option:'.$option['value']] = true;
                 }
-                $rows[$row['question_key']] = $row;
+                $rows[$questionIdentity] = $row;
             }
             if ($rows === []) {
                 $this->fail('CSV enthält keine Fragen.');
             }
             $seenRules = [];
-            foreach ($rows as $key => $row) {
+            foreach ($rows as $row) {
+                // CSV keys remain strings even when PHP would cast a numeric array key.
+                $key = $row['question_key'];
                 foreach ($row['rules_json'] as $rule) {
                     if (! is_array($rule) || Validator::make($rule, [
                         'target_question_key' => ['required', 'string'], 'operator' => ['required', Rule::enum(RuleOperator::class)],
@@ -109,7 +113,7 @@ class CatalogCsvParser
                     }
                     $target = $rule['target_question_key'];
                     $identity = json_encode([$key, $target, $rule['operator'], $rule['action']]);
-                    if (! isset($rows[$target]) || $target === $key || isset($seenRules[$identity])) {
+                    if (! isset($rows['question:'.$target]) || $target === $key || isset($seenRules[$identity])) {
                         $this->fail('Regel enthält unbekanntes Ziel, Selbstbezug oder doppelte Definition.');
                     }
                     $expected = $rule['expected_value'];

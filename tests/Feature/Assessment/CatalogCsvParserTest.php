@@ -45,6 +45,9 @@ class CatalogCsvParserTest extends TestCase
         $option = '{"value":"annual","label":"Jährlich","score":1,"sort_order":10}';
         $invalidSets = [
             [$this->row(), $this->row()],
+            [$this->row(['question_key' => '1']), $this->row(['question_key' => '1'])],
+            [$this->row(['category_key' => '1']), $this->row(['category_key' => '1', 'question_key' => '2', 'category_name' => 'Widerspruch'])],
+            [$this->row(['answer_type' => 'single_choice', 'options_json' => '[{"value":"1","label":"Eins","score":1,"sort_order":1},{"value":"1","label":"Noch einmal","score":0,"sort_order":2}]'])],
             [$this->row(), $this->row(['question_key' => 'example.second', 'category_name' => 'Anderer Name'])],
             [$this->row(['answer_type' => 'single_choice', 'options_json' => '['.$option.','.$option.']'])],
             [$this->row(['rules_json' => '[{"target_question_key":"example.second","operator":"contains","action":"include","expected_value":true}]']), $this->row(['question_key' => 'example.second'])],
@@ -59,6 +62,26 @@ class CatalogCsvParserTest extends TestCase
                 $this->assertArrayHasKey('csv', $exception->errors());
             }
         }
+    }
+
+    public function test_numeric_keys_keep_string_identity_and_allow_distinct_targets(): void
+    {
+        $rows = app(CatalogCsvParser::class)->parse($this->csv([
+            $this->row(['category_key' => '1', 'question_key' => '1', 'rules_json' => '[{"target_question_key":"2","operator":"equals","action":"include","expected_value":true}]']),
+            $this->row(['category_key' => '1', 'question_key' => '2']),
+            $this->row(['category_key' => '01', 'question_key' => '01', 'answer_type' => 'single_choice', 'options_json' => '[{"value":"1","label":"Eins","score":1,"sort_order":1},{"value":"01","label":"Null eins","score":0,"sort_order":2}]']),
+        ]));
+        $this->assertSame(['1', '2', '01'], array_column($rows, 'question_key'));
+        $this->assertSame('2', $rows[0]['rules_json'][0]['target_question_key']);
+        $this->assertSame(['1', '01'], array_column($rows[2]['options_json'], 'value'));
+    }
+
+    public function test_numeric_question_key_cannot_include_itself(): void
+    {
+        $this->expectException(ValidationException::class);
+        app(CatalogCsvParser::class)->parse($this->csv([
+            $this->row(['question_key' => '1', 'rules_json' => '[{"target_question_key":"1","operator":"equals","action":"include","expected_value":true}]']),
+        ]));
     }
 
     public function test_malformed_quotes_encoding_size_and_row_limit_are_rejected(): void
