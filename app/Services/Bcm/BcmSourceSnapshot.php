@@ -9,6 +9,7 @@ use App\Models\BiaConfigurationVersion;
 use App\Models\BiaImpact;
 use App\Models\BiaRevision;
 use App\Models\BusinessProcess;
+use App\Models\ContinuityPlanRevision;
 use App\Models\DependencyEdge;
 use App\Models\IsmsProject;
 
@@ -75,6 +76,32 @@ class BcmSourceSnapshot
         foreach ([BusinessProcess::class, Asset::class, DependencyEdge::class, BiaConfigurationVersion::class, BiaRevision::class, AssetRecoveryObjectiveRevision::class, BiaImpact::class] as $model) {
             $model::query()->where('project_id', $project->id)->orderBy('id')->lockForUpdate()->get(['id']);
         }
+    }
+
+    /** Resolve current approved heads from server-owned project sources.
+     * @return array<string, mixed>
+     */
+    public function plan(ContinuityPlanRevision $revision): array
+    {
+        $processes = [];
+        $assets = [];
+        foreach ($revision->processes()->orderBy('business_process_id')->get() as $link) {
+            $bia = BiaRevision::query()->where('project_id', $revision->project_id)->where('status', 'approved')
+                ->whereHas('analysis', fn ($query) => $query->where('project_id', $revision->project_id)->where('business_process_id', $link->business_process_id))
+                ->orderByDesc('version')->first();
+            $sources = $bia ? $this->bia($bia) : null;
+            $processes[] = ['process_id' => $link->business_process_id, 'revision_id' => $bia?->id, 'version' => $bia?->version, 'sources' => $sources];
+            foreach ($sources['dependencies'] ?? [] as $dependency) {
+                if ($dependency['target_type'] === 'asset') {
+                    $assets[$dependency['target_id']] = ['asset_id' => $dependency['target_id'], 'revision_id' => $dependency['objective']['id'] ?? null, 'version' => $dependency['objective']['version'] ?? null];
+                }
+            }
+        }
+        ksort($assets);
+
+        return ['project_id' => $revision->project_id, 'processes' => $processes, 'assets' => array_values($assets),
+            'evidence_ids' => $revision->evidenceLinks()->orderBy('evidence_id')->pluck('evidence_id')->all(),
+            'risk_analysis_ids' => $revision->riskLinks()->orderBy('risk_analysis_id')->pluck('risk_analysis_id')->all()];
     }
 
     /** @return array<string, mixed> */

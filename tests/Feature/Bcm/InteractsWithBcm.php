@@ -3,12 +3,29 @@
 namespace Tests\Feature\Bcm;
 
 use App\Models\BiaConfigurationVersion;
+use App\Models\BusinessProcess;
+use App\Models\ContinuityPlanRevision;
 use App\Models\IsmsProject;
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\Bcm\BiaConfigurationWorkflow;
+use App\Services\Bcm\BiaWorkflow;
+use App\Services\Bcm\ContinuityPlanWorkflow;
 
 trait InteractsWithBcm
 {
+    protected function approvedPlan(IsmsProject $project, User $actor): ContinuityPlanRevision
+    {
+        $process = BusinessProcess::factory()->create(['project_id' => $project->id]);
+        $configuration = app(BiaConfigurationWorkflow::class)->initialize($project, $actor);
+        $bia = app(BiaWorkflow::class);
+        $bia->approve($bia->save($bia->draft($process, $actor), $this->completeBiaData($configuration), 1, $actor), 2, $actor);
+        $workflow = app(ContinuityPlanWorkflow::class);
+        $revision = $workflow->create($project, ['title' => 'Recovery plan', 'scenario' => 'Service outage', 'activation_conditions' => 'Service unavailable', 'strategy' => 'Restore service', 'minimum_operation' => 'Manual operation', 'normal_operation_return' => 'Validate restoration', 'process_ids' => [$process->id], 'steps' => [['instruction' => 'Restore service', 'owner_name' => 'Operator']], 'roles' => [['role' => 'Lead', 'name' => 'Leader', 'deputy_name' => 'Deputy']]], $actor);
+
+        return $workflow->approve($revision, 1, $actor);
+    }
+
     protected function completeBiaData(BiaConfigurationVersion $configuration): array
     {
         $impacts = [];
