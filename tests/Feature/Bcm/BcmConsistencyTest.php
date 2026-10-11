@@ -10,6 +10,7 @@ use App\Services\Bcm\BcmConsistencyChecker;
 use App\Services\Bcm\BcmDependencyTraversal;
 use App\Services\Bcm\BiaConfigurationWorkflow;
 use App\Services\Bcm\BiaWorkflow;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -104,6 +105,35 @@ class BcmConsistencyTest extends TestCase
         $foreign = BusinessProcess::factory()->create();
         $this->expectException(NotFoundHttpException::class);
         app(BcmDependencyTraversal::class)->dependencies($project, $foreign);
+    }
+
+    public function test_foreign_targets_are_rejected_by_project_foreign_keys_and_never_traversed(): void
+    {
+        [$project] = $this->bcmProject();
+        $root = BusinessProcess::factory()->create(['project_id' => $project->id]);
+        $local = Asset::factory()->create(['project_id' => $project->id]);
+        $this->edge($project->id, $root->id, null, $local->id, 'critical');
+        $foreignProcess = BusinessProcess::factory()->create();
+        $foreignAsset = Asset::factory()->create(['project_id' => $foreignProcess->project_id]);
+
+        foreach (['process' => $foreignProcess, 'asset' => $foreignAsset] as $type => $foreign) {
+            try {
+                // The nested transaction rolls back the failed statement to a savepoint.
+                // Production composite foreign keys remain enabled throughout.
+                DB::transaction(fn () => $this->edge($project->id, $root->id,
+                    $type === 'process' ? $foreign->id : null,
+                    $type === 'asset' ? $foreign->id : null, 'critical'));
+                $this->fail('Foreign target edge was persisted');
+            } catch (QueryException $exception) {
+                $this->assertSame('23503', $exception->errorInfo[0]);
+                $this->assertStringContainsString('dependency_edges_target_'.$type.'_project_foreign', $exception->getMessage());
+            }
+        }
+
+        $paths = app(BcmDependencyTraversal::class)->dependencies($project, $root);
+        $this->assertSame([$local->id], array_column($paths, 'targetId'));
+        $this->assertDatabaseMissing('dependency_edges', ['project_id' => $project->id, 'target_process_id' => $foreignProcess->id]);
+        $this->assertDatabaseMissing('dependency_edges', ['project_id' => $project->id, 'target_asset_id' => $foreignAsset->id]);
     }
 
     public function test_latest_approved_process_target_configuration_is_checked_and_draft_is_ignored(): void
