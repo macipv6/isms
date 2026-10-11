@@ -1,6 +1,6 @@
 # Slice 7 — BIA, Notfallplanung und Übungen
 
-Status: Entwurf zur Nutzerprüfung; keine Implementierungsfreigabe.
+Status: Vom Nutzer freigegeben; Implementierung nach Planprüfung.
 
 ## Ziel und bestätigte Entscheidungen
 
