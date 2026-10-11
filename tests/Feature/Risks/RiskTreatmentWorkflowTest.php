@@ -111,7 +111,7 @@ class RiskTreatmentWorkflowTest extends TestCase
         [$project, $cycle, $actor] = $this->assessedCycle('rare', 'limited');
         $workflow = app(RiskTreatmentWorkflow::class);
         $workflow->select($cycle, RiskTreatmentAction::Transfer, ['rationale' => 'Vertrag', 'counterparty_name' => 'Geheimer Partner'], $actor);
-        $evidence = EvidenceFile::factory()->for($project, 'project')->create(['status' => EvidenceReviewStatus::Verified]);
+        $evidence = EvidenceFile::factory()->for($project, 'project')->create(['status' => EvidenceReviewStatus::Verified, 'reviewed_by' => $actor->id, 'reviewed_at' => now()]);
         $workflow->linkEvidence($cycle, $evidence, $actor);
         app(RiskAssessmentService::class)->assessResidual($cycle, 'rare', 'limited', 'Übertragen', $actor, $cycle->fresh()->lock_version);
         app(RiskCycleCompleter::class)->complete($cycle, $actor, $cycle->fresh()->lock_version);

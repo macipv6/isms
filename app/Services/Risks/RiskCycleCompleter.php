@@ -4,6 +4,7 @@ namespace App\Services\Risks;
 
 use App\Enums\RiskCycleStatus;
 use App\Enums\RiskDecisionStatus;
+use App\Models\EvidenceFile;
 use App\Models\RiskAnalysisCycle;
 use App\Models\RiskAnalysisTrigger;
 use App\Models\RiskFrequencyLevel;
@@ -27,6 +28,11 @@ class RiskCycleCompleter
                 throw ValidationException::withMessages(['cycle' => 'Eine gültige Restbewertung und Behandlung sind erforderlich.']);
             }
             $this->prerequisites->assert($locked, $treatment, RiskFrequencyLevel::query()->findOrFail($assessment->frequency_level_id), RiskImpactLevel::query()->findOrFail($assessment->impact_level_id));
+            $evidenceIds = $locked->evidenceLinks()->lockForUpdate()->pluck('evidence_id');
+            $evidence = EvidenceFile::query()->where('project_id', $project->id)->whereIn('id', $evidenceIds)->lockForUpdate()->get();
+            if ($evidence->count() !== $evidenceIds->count() || $evidence->contains(fn (EvidenceFile $file): bool => $file->status->value !== 'verified' || $file->reviewed_by === null || $file->reviewed_at === null)) {
+                throw ValidationException::withMessages(['evidence' => 'Alle verknüpften Nachweise müssen aktuell geprüft sein.']);
+            }
             $high = in_array($assessment->riskLevel->key, ['high', 'very_high'], true);
             if ($high) {
                 $decision = $locked->decisions()->whereNull('invalidated_at')->where('status', RiskDecisionStatus::Accepted->value)->first();
