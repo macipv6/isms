@@ -6,6 +6,7 @@ use App\Data\Imports\RegisterCsvRow;
 use App\Enums\AssetType;
 use App\Enums\DependencyImportance;
 use App\Enums\DependencyNodeType;
+use App\Enums\ProtectionLevel;
 use App\Enums\RegisterImportKind;
 use App\Services\Registers\RegisterKey;
 use Illuminate\Support\Facades\Validator;
@@ -49,7 +50,7 @@ class RegisterRowValidator
                 $this->reject($line, 'key');
             }
         }
-        foreach (['source_key', 'target_key'] as $field) {
+        foreach (['source_key', 'target_key', 'object_key'] as $field) {
             if (isset($values[$field])) {
                 try {
                     $values[$field] = RegisterKey::normalize((string) $values[$field]);
@@ -59,7 +60,7 @@ class RegisterRowValidator
             }
         }
 
-        foreach (['active'] as $field) {
+        foreach ($kind === RegisterImportKind::ProtectionNeeds ? [] : ['active'] as $field) {
             $value = strtolower((string) $values[$field]);
             if (! in_array($value, ['true', 'false'], true)) {
                 $this->reject($line, $field);
@@ -75,6 +76,19 @@ class RegisterRowValidator
         }
         if (isset($values['target_type']) && DependencyNodeType::tryFrom((string) $values['target_type']) === null) {
             $this->reject($line, 'target_type');
+        }
+        if (isset($values['object_type'])) {
+            $values['object_type'] = strtolower((string) $values['object_type']);
+            if (DependencyNodeType::tryFrom($values['object_type']) === null) {
+                $this->reject($line, 'object_type');
+            }
+        }
+        if ($kind === RegisterImportKind::ProtectionNeeds) {
+            foreach (['confidentiality', 'integrity', 'availability'] as $objective) {
+                if (ProtectionLevel::tryFrom((string) $values[$objective]) === null) {
+                    $this->reject($line, $objective);
+                }
+            }
         }
         if (isset($values['importance']) && DependencyImportance::tryFrom((string) $values['importance']) === null) {
             $this->reject($line, 'importance');
@@ -100,6 +114,13 @@ class RegisterRowValidator
     public function identifier(RegisterImportKind $kind, array $row): ?string
     {
         try {
+            if ($kind === RegisterImportKind::ProtectionNeeds) {
+                $type = isset($row['object_type']) && is_string($row['object_type'])
+                    ? DependencyNodeType::tryFrom(strtolower(trim($row['object_type']))) : null;
+
+                return $type && isset($row['object_key']) && is_string($row['object_key'])
+                    ? $type->value.'|'.RegisterKey::normalize($row['object_key']) : null;
+            }
             if ($kind !== RegisterImportKind::Dependencies) {
                 return isset($row['key']) && is_string($row['key'])
                     ? RegisterKey::normalize($row['key'])
@@ -134,13 +155,18 @@ class RegisterRowValidator
             RegisterImportKind::Processes => ['key', 'name', 'description', 'owner_name', 'owner_email', 'active'],
             RegisterImportKind::Assets => ['key', 'name', 'type', 'description', 'owner_name', 'owner_email', 'active'],
             RegisterImportKind::Dependencies => ['source_type', 'source_key', 'target_type', 'target_key', 'importance', 'reason', 'active'],
+            RegisterImportKind::ProtectionNeeds => ['object_type', 'object_key', 'confidentiality', 'confidentiality_rationale', 'integrity', 'integrity_rationale', 'availability', 'availability_rationale'],
         };
     }
 
     /** @return list<string> */
     private function optionalFields(RegisterImportKind $kind): array
     {
-        return $kind === RegisterImportKind::Dependencies ? ['reason'] : ['description', 'owner_name', 'owner_email'];
+        return match ($kind) {
+            RegisterImportKind::Dependencies => ['reason'],
+            RegisterImportKind::ProtectionNeeds => [],
+            default => ['description', 'owner_name', 'owner_email'],
+        };
     }
 
     /** @return array<string, list<string>> */
@@ -152,6 +178,11 @@ class RegisterRowValidator
             RegisterImportKind::Processes => $common,
             RegisterImportKind::Assets => array_merge($common, ['type' => ['required', 'string']]),
             RegisterImportKind::Dependencies => ['reason' => ['nullable', 'string', 'max:1000']],
+            RegisterImportKind::ProtectionNeeds => [
+                'confidentiality_rationale' => ['required', 'string', 'max:4000'],
+                'integrity_rationale' => ['required', 'string', 'max:4000'],
+                'availability_rationale' => ['required', 'string', 'max:4000'],
+            ],
         };
     }
 

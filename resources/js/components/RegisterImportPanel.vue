@@ -2,12 +2,16 @@
 import { useForm } from '@inertiajs/vue3';
 import FormErrorList from '@/components/FormErrorList.vue';
 import RegisterImportPreview from '@/components/RegisterImportPreview.vue';
-import type { RegisterImportPreviewData } from '@/types/registers';
+import type {
+    RegisterImportPreviewData,
+    RegisterKind,
+} from '@/types/registers';
 
 const props = defineProps<{
     previewUrl: string;
     canImport: boolean;
     preview: RegisterImportPreviewData | null;
+    kind?: RegisterKind;
 }>();
 const uploadForm = useForm<{ file: File | null }>({ file: null });
 
@@ -29,10 +33,19 @@ function upload(): void {
     <section
         class="mt-8 rounded-2xl border border-slate-800 bg-slate-900/40 p-5"
     >
-        <h2 class="text-lg font-semibold">CSV-Import</h2>
+        <h2 class="text-lg font-semibold">
+            {{
+                kind === 'protection_needs'
+                    ? 'Schutzbedarf aus CSV importieren'
+                    : 'CSV-Import'
+            }}
+        </h2>
         <p class="mt-2 text-sm text-slate-400">
             Die Datei wird zuerst vollständig geprüft. Erst die anschließende
             Bestätigung ändert das Register.
+            <span v-if="kind === 'protection_needs'">
+                Herabstufungen benötigen danach eine separate Freigabe.</span
+            >
         </p>
         <form
             v-if="canImport"

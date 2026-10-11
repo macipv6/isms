@@ -1,4 +1,8 @@
-export type RegisterKind = 'processes' | 'assets' | 'dependencies';
+export type RegisterKind =
+    | 'processes'
+    | 'assets'
+    | 'dependencies'
+    | 'protection_needs';
 export type RegisterStateFilter = 'active' | 'inactive';
 export type AssetType =
     | 'information'
@@ -88,6 +92,7 @@ export interface ImportPreviewRow {
     field?: string;
     code?: string;
     reference?: string;
+    requires_downgrade_approval?: boolean;
 }
 
 export interface RegisterImportPreviewData {

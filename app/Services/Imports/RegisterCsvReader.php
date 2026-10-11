@@ -300,7 +300,11 @@ class RegisterCsvReader
 
     private function duplicateField(RegisterImportKind $kind): string
     {
-        return $kind === RegisterImportKind::Dependencies ? 'target_key' : 'key';
+        return match ($kind) {
+            RegisterImportKind::Dependencies => 'target_key',
+            RegisterImportKind::ProtectionNeeds => 'object_key',
+            default => 'key',
+        };
     }
 
     /**

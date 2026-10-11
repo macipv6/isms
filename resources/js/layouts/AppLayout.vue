@@ -30,6 +30,30 @@ function logout(): void {
                     </div>
                     <nav class="hidden items-center gap-5 text-sm md:flex">
                         <Link
+                            v-if="
+                                user?.role === 'admin' ||
+                                user?.role === 'consultant'
+                            "
+                            href="/risk-methodologies"
+                            class="text-slate-300 hover:text-white"
+                            >Risikomethodiken</Link
+                        >
+                        <Link
+                            v-if="
+                                user?.role === 'admin' ||
+                                user?.role === 'consultant'
+                            "
+                            href="/threat-catalogs"
+                            class="text-slate-300 hover:text-white"
+                            >Gefährdungskataloge</Link
+                        >
+                        <Link
+                            v-if="user?.role === 'admin'"
+                            href="/assessment-catalogs"
+                            class="text-slate-300 hover:text-white"
+                            >Fragekataloge</Link
+                        >
+                        <Link
                             href="/dashboard"
                             class="text-slate-300 hover:text-white"
                             >Dashboard</Link

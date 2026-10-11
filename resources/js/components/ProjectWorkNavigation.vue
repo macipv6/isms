@@ -10,6 +10,7 @@ const props = defineProps<{
 
 const base = `/organizations/${props.organizationId}/projects/${props.projectId}`;
 const tabs: Array<{ key: ProjectWorkTab; label: string; href: string }> = [
+    { key: 'risks', label: 'Risiken', href: `${base}/risks` },
     { key: 'assessment', label: 'Bewertung', href: `${base}/assessment` },
     { key: 'evidence', label: 'Nachweise', href: `${base}/evidence` },
     { key: 'findings', label: 'Feststellungen', href: `${base}/findings` },
@@ -20,6 +21,11 @@ const tabs: Array<{ key: ProjectWorkTab; label: string; href: string }> = [
         key: 'dependencies',
         label: 'Abhängigkeiten',
         href: `${base}/dependencies`,
+    },
+    {
+        key: 'protection-needs',
+        label: 'Schutzbedarf',
+        href: `${base}/protection-needs`,
     },
 ];
 </script>

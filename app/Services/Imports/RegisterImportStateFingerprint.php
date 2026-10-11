@@ -7,12 +7,69 @@ use App\Models\Asset;
 use App\Models\BusinessProcess;
 use App\Models\DependencyEdge;
 use App\Models\IsmsProject;
+use App\Models\ProtectionNeed;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use JsonException;
 
 class RegisterImportStateFingerprint
 {
+    /** @param list<array<string, string|bool|null>> $rows */
+    public function makeProtectionNeeds(IsmsProject $project, array $rows, bool $lock = false): string
+    {
+        $processQuery = BusinessProcess::query()->where('project_id', $project->id)->orderBy('id');
+        $assetQuery = Asset::query()->where('project_id', $project->id)->orderBy('id');
+        $needQuery = ProtectionNeed::query()->where('project_id', $project->id)->orderBy('id');
+        $edgeQuery = DependencyEdge::query()->where('project_id', $project->id)->where('is_active', true)->orderBy('id');
+        if ($lock) {
+            $processQuery->lockForUpdate();
+            $assetQuery->lockForUpdate();
+            $needQuery->lockForUpdate();
+            $edgeQuery->lockForUpdate();
+        }
+        $processes = $processQuery->get();
+        $assets = $assetQuery->get();
+        $processesByKey = $processes->keyBy('key');
+        $assetsByKey = $assets->keyBy('key');
+        $needs = $needQuery->get();
+        $edges = $edgeQuery->get();
+        $targets = [];
+        foreach ($rows as $row) {
+            $records = $row['object_type'] === 'process' ? $processesByKey : $assetsByKey;
+            $record = $records->get($row['object_key']);
+            $targets[$row['object_type'].'|'.$row['object_key']] = $record ? [
+                'id' => $record->id, 'active' => $record->is_active, 'updated_at' => $record->updated_at->toIso8601String(),
+            ] : null;
+        }
+        ksort($targets);
+
+        $direct = $needs->mapWithKeys(fn (ProtectionNeed $need): array => [$need->id => [
+            'process_id' => $need->business_process_id,
+            'asset_id' => $need->asset_id,
+            'objective' => $need->objective->value,
+            'level' => $need->direct_level?->value,
+            'rationale' => $need->direct_rationale,
+            'version' => $need->lock_version,
+            'status' => $need->status->value,
+        ]])->all();
+        $graph = [
+            'processes' => $processes->mapWithKeys(fn (BusinessProcess $process): array => [$process->id => $process->is_active])->all(),
+            'assets' => $assets->mapWithKeys(fn (Asset $asset): array => [$asset->id => $asset->is_active])->all(),
+            'edges' => $edges->mapWithKeys(fn (DependencyEdge $edge): array => [$edge->id => [
+                $edge->source_process_id, $edge->source_asset_id, $edge->target_process_id, $edge->target_asset_id,
+                $edge->importance->value, $edge->reason, $edge->updated_at->toIso8601String(),
+            ]])->all(),
+        ];
+
+        return hash_hmac('sha256', json_encode([
+            'kind' => RegisterImportKind::ProtectionNeeds->value,
+            'project' => [$project->id, $project->organization_id, $project->status->value, $project->organization?->is_active],
+            'targets' => $targets,
+            'direct' => $direct,
+            'graph' => $graph,
+        ], JSON_THROW_ON_ERROR), (string) config('app.key'));
+    }
+
     /**
      * @template TKey of array-key
      * @template TModel of BusinessProcess|Asset

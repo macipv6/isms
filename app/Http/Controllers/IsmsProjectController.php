@@ -8,6 +8,7 @@ use App\Models\IsmsProject;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
+use App\Services\Projects\ProjectWorkflow;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -90,39 +91,12 @@ class IsmsProjectController extends Controller
         UpdateProjectRequest $request,
         Organization $organization,
         IsmsProject $project,
-        AuditLogger $audit,
+        ProjectWorkflow $workflow,
     ): RedirectResponse {
         $this->ensureCustomer($organization);
         $this->ensureProjectBelongsToOrganization($project, $organization);
         Gate::authorize('update', $project);
-
-        $project->fill($request->validated());
-        $changedFields = array_keys($project->getDirty());
-        $project->save();
-
-        if ($changedFields !== []) {
-            $audit->record(
-                'project.updated',
-                $this->actor($request),
-                [
-                    'project_id' => $project->id,
-                    'changed_fields' => $changedFields,
-                ],
-                $organization->id,
-            );
-        }
-
-        if (in_array('status', $changedFields, true)) {
-            $audit->record(
-                'project.status_changed',
-                $this->actor($request),
-                [
-                    'project_id' => $project->id,
-                    'changed_fields' => ['status'],
-                ],
-                $organization->id,
-            );
-        }
+        $workflow->update($project, $request->validated(), $this->actor($request));
 
         return redirect('/organizations/'.$organization->id);
     }

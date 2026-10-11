@@ -6,12 +6,13 @@ use App\Enums\EvidenceReviewStatus;
 use App\Models\EvidenceFile;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
+use App\Services\Risks\RiskChangeInvalidator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class EvidenceReviewService
 {
-    public function __construct(private readonly EvidenceLinkService $links, private readonly AuditLogger $audit) {}
+    public function __construct(private readonly EvidenceLinkService $links, private readonly AuditLogger $audit, private readonly RiskChangeInvalidator $risks) {}
 
     public function review(EvidenceFile $evidence, EvidenceReviewStatus $status, ?string $note, User $actor): EvidenceFile
     {
@@ -43,6 +44,7 @@ class EvidenceReviewService
                 ['project_id' => $locked->project_id, 'evidence_id' => $locked->id, 'old_status' => $old->value, 'new_status' => $status->value],
                 $locked->project->organization_id,
             );
+            $this->risks->invalidateForLinkedResource($locked->project, 'evidence', $locked->id, $actor);
 
             return $locked;
         });

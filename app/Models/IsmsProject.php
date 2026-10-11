@@ -127,4 +127,22 @@ class IsmsProject extends Model
     {
         return $this->hasMany(RegisterImportBatch::class, 'project_id');
     }
+
+    /** @return HasOne<ProjectRiskContext, $this> */
+    public function riskContext(): HasOne
+    {
+        return $this->hasOne(ProjectRiskContext::class, 'project_id');
+    }
+
+    /** @return HasMany<ProjectThreat, $this> */
+    public function projectThreats(): HasMany
+    {
+        return $this->hasMany(ProjectThreat::class, 'project_id');
+    }
+
+    /** @return HasMany<ProtectionNeed, $this> */
+    public function protectionNeeds(): HasMany
+    {
+        return $this->hasMany(ProtectionNeed::class, 'project_id');
+    }
 }

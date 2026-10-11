@@ -2,13 +2,18 @@
 
 namespace App\Services\Registers;
 
+use App\Data\Dependencies\DependencyNode;
 use App\Enums\AssetType;
 use App\Enums\ProjectStatus;
 use App\Enums\UserRole;
 use App\Models\Asset;
 use App\Models\IsmsProject;
+use App\Models\ProtectionNeed;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
+use App\Services\ProtectionNeeds\ProtectionNeedInitializer;
+use App\Services\ProtectionNeeds\ProtectionNeedInvalidator;
+use App\Services\ProtectionNeeds\ProtectionNeedPropagator;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -17,7 +22,7 @@ use Illuminate\Validation\ValidationException;
 
 class AssetService
 {
-    public function __construct(private readonly AuditLogger $audit) {}
+    public function __construct(private readonly AuditLogger $audit, private readonly ProtectionNeedInitializer $needs, private readonly ProtectionNeedPropagator $propagator, private readonly ProtectionNeedInvalidator $invalidator) {}
 
     /** @param array<string, mixed> $attributes */
     public function create(IsmsProject $project, array $attributes, User $actor, bool $audit = true): Asset
@@ -33,6 +38,7 @@ class AssetService
             $active = $data['active'];
             unset($data['active']);
             $asset = Asset::query()->create([...$data, 'project_id' => $lockedProject->id, 'is_active' => $active, 'created_by' => $actor->id]);
+            $this->needs->ensureTarget(DependencyNode::asset($asset));
             if ($audit) {
                 $this->audit->record('asset.created', $actor, ['project_id' => $lockedProject->id, 'asset_id' => $asset->id, 'key' => $asset->key], $lockedProject->organization_id);
             }
@@ -70,7 +76,22 @@ class AssetService
 
     public function changeStatus(Asset $asset, bool $active, User $actor, bool $audit = true): Asset
     {
-        return DB::transaction(function () use ($asset, $active, $actor, $audit): Asset {
+        return $this->changeStatusInternal($asset, $active, $actor, $audit, false);
+    }
+
+    /** @internal The import caller performs one protection recalculation before its transaction commits. */
+    public function changeStatusForImport(Asset $asset, bool $active, User $actor): Asset
+    {
+        if (DB::transactionLevel() === 0) {
+            $this->reject('import', 'Statusänderungen im Import benötigen eine laufende Transaktion.');
+        }
+
+        return $this->changeStatusInternal($asset, $active, $actor, false, true);
+    }
+
+    private function changeStatusInternal(Asset $asset, bool $active, User $actor, bool $audit, bool $deferRecalculation): Asset
+    {
+        return DB::transaction(function () use ($asset, $active, $actor, $audit, $deferRecalculation): Asset {
             $project = $this->project($asset->project, $actor);
             $locked = $this->locked($project, $asset);
             if ($locked->is_active === $active) {
@@ -78,6 +99,13 @@ class AssetService
             }
             $old = $locked->is_active;
             $locked->update(['is_active' => $active]);
+            foreach (ProtectionNeed::query()->where('asset_id', $locked->id)->get() as $need) {
+                $this->invalidator->invalidate($need, $actor);
+            }
+            if (! $deferRecalculation) {
+                $this->propagator->recalculate($project, [], $actor);
+            }
+            $this->invalidator->refreshRiskTarget(DependencyNode::asset($locked), $audit, $actor);
             if ($audit) {
                 $this->audit->record('asset.status_changed', $actor, ['project_id' => $project->id, 'asset_id' => $locked->id, 'key' => $locked->key, 'old_active' => $old ? 'true' : 'false', 'new_active' => $active ? 'true' : 'false'], $project->organization_id);
             }

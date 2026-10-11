@@ -12,11 +12,14 @@ use App\Models\BusinessProcess;
 use App\Models\DependencyEdge;
 use App\Models\IsmsProject;
 use App\Models\Organization;
+use App\Models\ProtectionNeed;
 use App\Models\RegisterImportBatch;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use App\Services\Dependencies\DependencyCycleDetector;
 use App\Services\Dependencies\DependencyService;
+use App\Services\ProtectionNeeds\ProtectionNeedInvalidator;
+use App\Services\ProtectionNeeds\ProtectionNeedPropagator;
 use App\Services\Registers\AssetService;
 use App\Services\Registers\BusinessProcessService;
 use Illuminate\Database\Eloquent\Model;
@@ -35,6 +38,9 @@ class RegisterImportConfirmer
         private readonly RegisterImportStateFingerprint $stateFingerprint,
         private readonly DependencyCycleDetector $cycleDetector,
         private readonly DependencyService $dependencies,
+        private readonly ProtectionNeedInvalidator $needInvalidator,
+        private readonly ProtectionNeedPropagator $needPropagator,
+        private readonly ProtectionNeedImportApplier $needImportApplier,
     ) {}
 
     public function confirm(RegisterImportBatch $batch, User $actor): RegisterImportBatch
@@ -45,10 +51,18 @@ class RegisterImportConfirmer
                 if (! $lockedBatch instanceof RegisterImportBatch) {
                     $this->reject();
                 }
-                $this->assertConfirmable($lockedBatch, $actor);
+                $actor = $this->assertConfirmable($lockedBatch, $actor);
                 $project = $this->lockedWritableProject($lockedBatch);
                 $rows = $this->canonicalRows($lockedBatch);
-                if ($lockedBatch->kind === RegisterImportKind::Dependencies) {
+                if ($lockedBatch->kind === RegisterImportKind::ProtectionNeeds) {
+                    $counts = $this->protectionNeedCounts($project, $rows);
+                    if (! $this->sameCounts($counts, $lockedBatch->summary['counts'] ?? null)
+                        || ! is_string($lockedBatch->summary['state_fingerprint'] ?? null)
+                        || ! hash_equals($lockedBatch->summary['state_fingerprint'], $this->stateFingerprint->makeProtectionNeeds($project, $rows, true))) {
+                        $this->reject();
+                    }
+                    $this->needImportApplier->apply($project, $rows, $actor);
+                } elseif ($lockedBatch->kind === RegisterImportKind::Dependencies) {
                     $state = $this->lockedDependencyState($project, $rows);
                     $counts = $this->dependencyCounts($state['rows']);
                     if (! $this->sameCounts($counts, $lockedBatch->summary['counts'] ?? null)
@@ -70,7 +84,7 @@ class RegisterImportConfirmer
                     'status' => RegisterImportStatus::Applied,
                     'applied_at' => now('UTC'),
                 ]);
-                $this->audit->record('register_import.applied', $actor, [
+                $this->audit->record($lockedBatch->kind === RegisterImportKind::ProtectionNeeds ? 'protection_needs_import.applied' : 'register_import.applied', $actor, [
                     'project_id' => $project->id,
                     'import_batch_id' => $lockedBatch->id,
                     'import_kind' => $lockedBatch->kind->value,
@@ -88,17 +102,50 @@ class RegisterImportConfirmer
         }
     }
 
-    private function assertConfirmable(RegisterImportBatch $batch, User $actor): void
+    /**
+     * @param  list<array<string, string|bool|null>>  $rows
+     * @return array{new: int, changed: int, unchanged: int, invalid: int}
+     */
+    private function protectionNeedCounts(IsmsProject $project, array $rows): array
     {
-        $actor->loadMissing('organization');
-        if ($batch->created_by !== $actor->id
-            || ! $actor->is_active
-            || $actor->organization?->organization_type !== 'internal'
-            || ! in_array($actor->role, [UserRole::Admin, UserRole::Consultant], true)
+        $counts = ['new' => 0, 'changed' => 0, 'unchanged' => 0, 'invalid' => 0];
+        foreach ($rows as $row) {
+            $model = $row['object_type'] === 'process' ? BusinessProcess::class : Asset::class;
+            $record = $model::query()->where('project_id', $project->id)->where('key', $row['object_key'])->lockForUpdate()->first();
+            if (! $record || ! $record->is_active) {
+                $this->reject();
+            }
+            $column = $row['object_type'] === 'process' ? 'business_process_id' : 'asset_id';
+            $needs = ProtectionNeed::query()->where('project_id', $project->id)->where($column, $record->id)->lockForUpdate()->get()->keyBy(fn (ProtectionNeed $need): string => $need->objective->value);
+            $isNew = $needs->isEmpty() || $needs->every(fn (ProtectionNeed $need): bool => $need->direct_level === null);
+            $category = $isNew ? 'new' : 'unchanged';
+            foreach (['confidentiality', 'integrity', 'availability'] as $objective) {
+                $need = $needs->get($objective);
+                if (! $need || $need->direct_level?->value !== $row[$objective] || $need->direct_rationale !== $row[$objective.'_rationale']) {
+                    $category = $isNew ? 'new' : 'changed';
+                }
+            }
+            $counts[$category]++;
+        }
+
+        return $counts;
+    }
+
+    private function assertConfirmable(RegisterImportBatch $batch, User $actor): User
+    {
+        $current = User::query()->whereKey($actor->id)->lockForUpdate()->first();
+        $organization = $current?->organization()->lockForUpdate()->first();
+        if ($batch->created_by !== $current?->id
+            || ! $current->is_active
+            || ! $organization?->is_active
+            || $organization->organization_type !== 'internal'
+            || ! in_array($current->role, [UserRole::Admin, UserRole::Consultant], true)
             || $batch->status !== RegisterImportStatus::Pending
             || $batch->expires_at->getTimestamp() <= now('UTC')->getTimestamp()) {
             $this->reject();
         }
+
+        return $current;
     }
 
     private function lockedWritableProject(RegisterImportBatch $batch): IsmsProject
@@ -364,6 +411,7 @@ class RegisterImportConfirmer
      */
     private function applyDependencies(IsmsProject $project, array $rows, User $actor): void
     {
+        $changedTargets = [];
         foreach ($rows as $row) {
             if ($row['existing'] instanceof DependencyEdge
                 && $row['existing']->importance->value === $row['values']['importance']
@@ -371,6 +419,7 @@ class RegisterImportConfirmer
                 && $row['existing']->is_active === $row['values']['active']) {
                 continue;
             }
+            $graphChanged = $row['existing'] === null || $row['existing']->is_active !== $row['values']['active'];
             $this->dependencies->upsertFromImport(
                 $project,
                 $row['source'],
@@ -383,6 +432,15 @@ class RegisterImportConfirmer
                 $row['existing'],
                 $actor,
             );
+            if ($graphChanged) {
+                $changedTargets[$row['target']->identity()] = $row['target'];
+            }
+        }
+        if ($changedTargets !== []) {
+            foreach ($changedTargets as $target) {
+                $this->needInvalidator->invalidateTarget($target, $actor);
+            }
+            $this->needPropagator->recalculate($project, array_values($changedTargets), $actor);
         }
     }
 
@@ -497,6 +555,7 @@ class RegisterImportConfirmer
      */
     private function apply(IsmsProject $project, RegisterImportKind $kind, array $rows, Collection $existing, User $actor): void
     {
+        $statusesChanged = false;
         foreach ($rows as $row) {
             $record = $existing->get($row['key']);
             if (! $record instanceof Model) {
@@ -511,11 +570,16 @@ class RegisterImportConfirmer
             unset($attributes['key'], $attributes['active']);
             if ($record instanceof BusinessProcess) {
                 $updated = $this->processes->update($record, $attributes, $actor, $record->updated_at->toIso8601String(), false);
-                $this->processes->changeStatus($updated, (bool) $row['active'], $actor, false);
+                $statusesChanged = $statusesChanged || $updated->is_active !== (bool) $row['active'];
+                $this->processes->changeStatusForImport($updated, (bool) $row['active'], $actor);
             } elseif ($record instanceof Asset) {
                 $updated = $this->assets->update($record, $attributes, $actor, $record->updated_at->toIso8601String(), false);
-                $this->assets->changeStatus($updated, (bool) $row['active'], $actor, false);
+                $statusesChanged = $statusesChanged || $updated->is_active !== (bool) $row['active'];
+                $this->assets->changeStatusForImport($updated, (bool) $row['active'], $actor);
             }
+        }
+        if ($statusesChanged) {
+            $this->needPropagator->recalculate($project, [], $actor);
         }
     }
 

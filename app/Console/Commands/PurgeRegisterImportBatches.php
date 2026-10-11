@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\RegisterImportKind;
 use App\Enums\RegisterImportStatus;
 use App\Models\RegisterImportBatch;
 use App\Services\Audit\AuditLogger;
@@ -32,7 +33,7 @@ class PurgeRegisterImportBatches extends Command
                         return;
                     }
                     $batch->update(['status' => RegisterImportStatus::Expired, 'payload' => [], 'summary' => []]);
-                    $audit->record('register_import.expired', $batch->creator, [
+                    $audit->record($batch->kind === RegisterImportKind::ProtectionNeeds ? 'protection_needs_import.expired' : 'register_import.expired', $batch->creator, [
                         'project_id' => $batch->project_id,
                         'import_batch_id' => $batch->id,
                         'import_kind' => $batch->kind->value,

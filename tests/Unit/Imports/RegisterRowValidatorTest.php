@@ -10,6 +10,41 @@ use Tests\TestCase;
 
 class RegisterRowValidatorTest extends TestCase
 {
+    public function test_protection_need_row_normalizes_a_typed_key_and_preserves_direct_values(): void
+    {
+        $row = app(RegisterRowValidator::class)->validate(RegisterImportKind::ProtectionNeeds, [
+            'object_type' => 'process', 'object_key' => ' p-01 ',
+            'confidentiality' => 'high', 'confidentiality_rationale' => ' Customer records ',
+            'integrity' => 'very_high', 'integrity_rationale' => 'Binding calculations',
+            'availability' => 'normal', 'availability_rationale' => 'Manual fallback',
+        ], 2);
+
+        $this->assertSame('P-01', $row->values['object_key']);
+        $this->assertSame('Customer records', $row->values['confidentiality_rationale']);
+        $this->assertSame('process|P-01', app(RegisterRowValidator::class)->identifier(RegisterImportKind::ProtectionNeeds, $row->values));
+    }
+
+    public function test_protection_need_row_rejects_invalid_type_level_blank_rationale_and_formula(): void
+    {
+        $valid = [
+            'object_type' => 'asset', 'object_key' => 'A-01',
+            'confidentiality' => 'high', 'confidentiality_rationale' => 'Secret',
+            'integrity' => 'normal', 'integrity_rationale' => 'Checked',
+            'availability' => 'normal', 'availability_rationale' => 'Spare',
+        ];
+        foreach ([
+            ['object_type', 'other'], ['object_key', 'x'], ['confidentiality', 'critical'],
+            ['integrity_rationale', ' '], ['availability_rationale', '=HYPERLINK(1)'],
+        ] as [$field, $invalid]) {
+            try {
+                app(RegisterRowValidator::class)->validate(RegisterImportKind::ProtectionNeeds, array_replace($valid, [$field => $invalid]), 4);
+                $this->fail("Invalid {$field} accepted.");
+            } catch (ValidationException $exception) {
+                $this->assertSame(['Die CSV-Zeile ist nicht zulässig.'], $exception->errors()['rows.4.'.$field]);
+            }
+        }
+    }
+
     public function test_it_canonicalizes_process_and_asset_rows(): void
     {
         $process = app(RegisterRowValidator::class)->validate(RegisterImportKind::Processes, ['key' => ' pr_1 ', 'name' => ' Payroll ', 'description' => ' ', 'owner_name' => ' Ann ', 'owner_email' => ' ann@example.test ', 'active' => 'FALSE'], 7);

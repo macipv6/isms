@@ -281,7 +281,7 @@ class RegisterPresenter
     }
 
     /** @return array<string, mixed>|null */
-    private function importPreview(Request $request, IsmsProject $project, RegisterImportKind $kind, bool $writable, string $base): ?array
+    public function importPreview(Request $request, IsmsProject $project, RegisterImportKind $kind, bool $writable, string $base): ?array
     {
         $batchId = $request->query('batch');
         if (! is_string($batchId) || $batchId === '') {
@@ -334,6 +334,11 @@ class RegisterPresenter
         if (is_string($values['key'] ?? null) && preg_match('/^[A-Z0-9][A-Z0-9._-]{1,63}$/', $values['key']) === 1) {
             return $values['key'];
         }
+        if (is_string($values['object_type'] ?? null) && is_string($values['object_key'] ?? null)
+            && in_array($values['object_type'], ['process', 'asset'], true)
+            && preg_match('/^[A-Z0-9][A-Z0-9._-]{1,63}$/', $values['object_key']) === 1) {
+            return $values['object_type'].':'.$values['object_key'];
+        }
         if (is_string($values['source_type'] ?? null) && is_string($values['source_key'] ?? null)
             && is_string($values['target_type'] ?? null) && is_string($values['target_key'] ?? null)
             && in_array($values['source_type'], ['process', 'asset'], true)
@@ -353,7 +358,7 @@ class RegisterPresenter
     private function previewRow(array $row): array
     {
         $categories = ['new', 'changed', 'unchanged', 'invalid'];
-        $fields = ['file', 'key', 'name', 'description', 'owner_name', 'owner_email', 'active', 'type', 'source_type', 'source_key', 'target_type', 'target_key', 'importance', 'reason'];
+        $fields = ['file', 'key', 'name', 'description', 'owner_name', 'owner_email', 'active', 'type', 'source_type', 'source_key', 'target_type', 'target_key', 'importance', 'reason', 'object_type', 'object_key', 'confidentiality', 'confidentiality_rationale', 'integrity', 'integrity_rationale', 'availability', 'availability_rationale'];
         $codes = ['invalid_row', 'unknown_endpoint', 'inactive_endpoint', 'cycle'];
         $category = is_string($row['category'] ?? null) && in_array($row['category'], $categories, true) ? $row['category'] : 'invalid';
         $field = is_string($row['field'] ?? null) && in_array($row['field'], $fields, true) ? $row['field'] : null;
@@ -365,6 +370,7 @@ class RegisterPresenter
             'field' => $field,
             'code' => $code,
             'reference' => $this->rowReference($row),
+            'requires_downgrade_approval' => is_bool($row['requires_downgrade_approval'] ?? null) ? $row['requires_downgrade_approval'] : null,
         ], fn (mixed $value): bool => $value !== null);
     }
 
