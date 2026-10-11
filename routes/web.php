@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AssessmentAnswerController;
 use App\Http\Controllers\AssessmentController;
+use App\Http\Controllers\AssessmentCatalogController;
 use App\Http\Controllers\AssetController;
 use App\Http\Controllers\AssetRegisterController;
 use App\Http\Controllers\Auth\EntraAuthController;
@@ -45,6 +46,11 @@ Route::middleware('guest')->group(function (): void {
 
 Route::middleware(['auth', 'active-user'])->group(function (): void {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
+    Route::get('/assessment-catalogs', [AssessmentCatalogController::class, 'index'])->name('assessment-catalogs.index');
+    Route::get('/assessment-catalogs/template', [AssessmentCatalogController::class, 'template'])->name('assessment-catalogs.template');
+    Route::post('/assessment-catalogs/preview', [AssessmentCatalogController::class, 'preview'])->middleware('throttle:10,1')->name('assessment-catalogs.preview');
+    Route::get('/assessment-catalogs/previews/{batch}', [AssessmentCatalogController::class, 'show'])->whereUuid('batch')->name('assessment-catalogs.preview.show');
+    Route::post('/assessment-catalogs/previews/{batch}/confirm', [AssessmentCatalogController::class, 'confirm'])->whereUuid('batch')->name('assessment-catalogs.confirm');
 
     Route::get('/organizations', [OrganizationController::class, 'index'])->name('organizations.index');
     Route::get('/organizations/create', [OrganizationController::class, 'create'])->name('organizations.create');
