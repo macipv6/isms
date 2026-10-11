@@ -45,6 +45,7 @@ class IsmsProject extends Model
             'started_at' => 'immutable_date',
             'target_date' => 'immutable_date',
             'completed_at' => 'immutable_date',
+            'bia_configuration_lock_version' => 'integer',
         ];
     }
 
