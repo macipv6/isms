@@ -6,6 +6,7 @@ use App\Http\Requests\Risks\SaveThreatCatalogDraftRequest;
 use App\Http\RiskRouteScope;
 use App\Models\ThreatCatalogVersion;
 use App\Policies\ProjectRiskPolicy;
+use App\Services\Risks\RiskVersionPresenter;
 use App\Services\Threats\ThreatCatalogPublisher;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,7 +30,7 @@ class ThreatCatalogController extends RiskController
         $versions = [];
         $page = $query->paginate(10, ['*'], 'version_page')->appends($filters);
         foreach ($page->items() as $version) {
-            $versions[] = app(\App\Services\Risks\RiskVersionPresenter::class)->catalog($version, true, (int) ($filters['entry_page'] ?? 1));
+            $versions[] = app(RiskVersionPresenter::class)->catalog($version, true, (int) ($filters['entry_page'] ?? 1));
         }
 
         return Inertia::render('threat-catalogs/Index', ['versions' => $versions, 'capabilities' => ['publish' => $canPublish], 'versionPage' => $page->currentPage(), 'pagination' => ['next' => $page->nextPageUrl(), 'previous' => $page->previousPageUrl()]]);

@@ -1,8 +1,8 @@
 <?php
 
 use App\Http\Controllers\AssessmentAnswerController;
-use App\Http\Controllers\AssessmentController;
 use App\Http\Controllers\AssessmentCatalogController;
+use App\Http\Controllers\AssessmentController;
 use App\Http\Controllers\AssetController;
 use App\Http\Controllers\AssetRegisterController;
 use App\Http\Controllers\Auth\EntraAuthController;

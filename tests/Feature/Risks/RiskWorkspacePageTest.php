@@ -6,6 +6,8 @@ use App\Enums\ProjectStatus;
 use App\Enums\RiskTreatmentAction;
 use App\Enums\RiskTriggerType;
 use App\Models\EvidenceFile;
+use App\Models\ProjectThreat;
+use App\Services\Risks\RiskAnalysisWorkflow;
 use App\Services\Risks\RiskAssessmentService;
 use App\Services\Risks\RiskTreatmentWorkflow;
 use App\Services\Risks\RiskTriggerEvaluator;
@@ -57,8 +59,8 @@ class RiskWorkspacePageTest extends TestCase
             'status' => 'verified', 'reviewed_by' => $actor->id, 'reviewed_at' => now(),
             'storage_path' => 'private/cessation-secret.pdf', 'sha256' => str_repeat('c', 64),
         ]);
-        $threat = \App\Models\ProjectThreat::query()->where('project_id', $project->id)->firstOrFail();
-        $avoided = app(\App\Services\Risks\RiskAnalysisWorkflow::class)->create($project, $target, $threat, [
+        $threat = ProjectThreat::query()->where('project_id', $project->id)->firstOrFail();
+        $avoided = app(RiskAnalysisWorkflow::class)->create($project, $target, $threat, [
             'title' => 'Stilllegung', 'cause' => 'Altbetrieb', 'event' => 'Ausfall', 'impact' => 'Unterbrechung',
             'confidentiality' => false, 'integrity' => false, 'availability' => true,
         ], [], $actor);

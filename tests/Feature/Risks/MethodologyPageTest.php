@@ -5,6 +5,7 @@ namespace Tests\Feature\Risks;
 use App\Enums\UserRole;
 use App\Models\RiskMethodologyVersion;
 use App\Services\RiskMethodology\RiskMethodologyPublisher;
+use App\Services\Risks\RiskVersionPresenter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -22,7 +23,7 @@ class MethodologyPageTest extends TestCase
         $draft = app(RiskMethodologyPublisher::class)->clonePublished($source, 'Neue Matrix', $actor);
         $this->actingAs($actor)->get('/risk-methodologies')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('risk-methodologies/Index')->where('capabilities.publish', true)->has('versions', 2));
-        $matrix = app(\App\Services\Risks\RiskVersionPresenter::class)->methodology($draft);
+        $matrix = app(RiskVersionPresenter::class)->methodology($draft);
         $this->actingAs($actor)->put("/risk-methodologies/{$draft->id}/draft", ['levels' => $matrix['levels'], 'cells' => $matrix['cells']])->assertSessionHasNoErrors();
         $actor->update(['role' => UserRole::Consultant]);
         $this->actingAs($actor)->get('/risk-methodologies')->assertOk()->assertInertia(fn (Assert $page) => $page

@@ -8,6 +8,7 @@ use App\Http\RiskRouteScope;
 use App\Models\RiskMethodologyVersion;
 use App\Policies\ProjectRiskPolicy;
 use App\Services\RiskMethodology\RiskMethodologyPublisher;
+use App\Services\Risks\RiskVersionPresenter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -31,7 +32,7 @@ class RiskMethodologyController extends RiskController
         $versions = [];
         $page = $query->paginate(10, ['*'], 'version_page')->appends($filters);
         foreach ($page->items() as $version) {
-            $versions[] = app(\App\Services\Risks\RiskVersionPresenter::class)->methodology($version);
+            $versions[] = app(RiskVersionPresenter::class)->methodology($version);
         }
 
         return Inertia::render('risk-methodologies/Index', [
