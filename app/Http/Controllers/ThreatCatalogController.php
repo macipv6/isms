@@ -17,6 +17,9 @@ class ThreatCatalogController extends RiskController
 {
     public function index(Request $request): Response
     {
+        $filters = validator($request->query(), ['version_page' => ['nullable', 'integer', 'min:1'], 'entry_page' => ['nullable', 'integer', 'min:1']])->validate();
+        $safeQuery = http_build_query($filters);
+        Inertia::resolveUrlUsing(fn (Request $request): string => $request->getPathInfo().($safeQuery !== '' ? '?'.$safeQuery : ''));
         abort_unless(app(ProjectRiskPolicy::class)->viewGlobal($this->actor($request)), 403);
         $canPublish = app(ProjectRiskPolicy::class)->publishGlobal($this->actor($request));
         $query = ThreatCatalogVersion::query()->with('catalog:id,key,name')->orderByDesc('published_at');
@@ -24,16 +27,12 @@ class ThreatCatalogController extends RiskController
             $query->where('status', 'published');
         }
         $versions = [];
-        foreach ($query->limit(100)->get() as $version) {
-            $versions[] = [
-                'id' => $version->id, 'catalogId' => $version->catalog_id,
-                'name' => $version->catalog->name, 'version' => $version->version,
-                'status' => $version->status->value, 'description' => mb_substr((string) $version->description, 0, 10000),
-                'publishedAt' => $version->published_at ? (string) $version->published_at : null,
-            ];
+        $page = $query->paginate(10, ['*'], 'version_page')->appends($filters);
+        foreach ($page->items() as $version) {
+            $versions[] = app(\App\Services\Risks\RiskVersionPresenter::class)->catalog($version, true, (int) ($filters['entry_page'] ?? 1));
         }
 
-        return Inertia::render('threat-catalogs/Index', ['versions' => $versions, 'capabilities' => ['publish' => $canPublish]]);
+        return Inertia::render('threat-catalogs/Index', ['versions' => $versions, 'capabilities' => ['publish' => $canPublish], 'versionPage' => $page->currentPage(), 'pagination' => ['next' => $page->nextPageUrl(), 'previous' => $page->previousPageUrl()]]);
     }
 
     public function clone(Request $request, ThreatCatalogPublisher $service): RedirectResponse

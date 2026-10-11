@@ -83,3 +83,164 @@ export const levelLabels: Record<ProtectionLevel, string> = {
     high: 'Hoch',
     very_high: 'Sehr hoch',
 };
+
+export interface RiskScale {
+    key: string;
+    label: string;
+    description: string | null;
+    sort_order: number;
+}
+export interface RiskMatrixCell {
+    frequency_key: string;
+    impact_key: string;
+    risk_key: string;
+}
+export interface RiskVersion {
+    id: string;
+    name: string;
+    version: number;
+    status: 'draft' | 'published';
+    description: string;
+    sourceReference: string | null;
+    publishedAt: string | null;
+}
+export interface MethodologyVersion extends RiskVersion {
+    levels: { frequency: RiskScale[]; impact: RiskScale[]; risk: RiskScale[] };
+    cells: RiskMatrixCell[];
+}
+export interface CatalogEntry {
+    code: string;
+    title: string;
+    description: string;
+    confidentiality: boolean;
+    integrity: boolean;
+    availability: boolean;
+    sort_order: number;
+    source_edition: string | null;
+    source_reference: string | null;
+}
+export interface CatalogVersion extends RiskVersion {
+    entryPages: { current: number; last: number };
+    threatCount: number;
+    sourceEdition: string | null;
+    entries: CatalogEntry[];
+}
+export interface RiskTrigger {
+    id: string;
+    targetId: string;
+    targetType: ProtectionTargetType;
+    type: string;
+    status: string;
+    rationale: string;
+}
+export interface RiskThreat {
+    id: string;
+    code: string;
+    title: string;
+    description: string;
+}
+export interface ThreatReview {
+    id: string;
+    threatId: string;
+    status: string;
+    rationale: string | null;
+}
+export interface RiskTarget {
+    id: string;
+    type: ProtectionTargetType;
+    key: string;
+    name: string;
+    active: boolean;
+    reviews: ThreatReview[];
+    protectionNeeds: Array<{
+        objective: ProtectionObjective;
+        level: ProtectionLevel | null;
+        needsReview: boolean;
+        sources: Array<{
+            source_type: string;
+            source_id: string;
+            path: string[];
+        }>;
+    }>;
+}
+export interface RiskResource {
+    id: string;
+    label: string;
+    status: string;
+}
+export type RiskResourceKind = 'finding' | 'measure' | 'evidence';
+export type RiskResources = Record<RiskResourceKind, RiskResource[]>;
+export interface RiskCycle {
+    completionBlockers: string[];
+    id: string;
+    analysisId: string;
+    targetType: ProtectionTargetType;
+    targetId: string;
+    threatId: string;
+    title: string;
+    cause: string;
+    event: string;
+    impact: string;
+    status: string;
+    current: boolean;
+    needsReview: boolean;
+    lockVersion: number;
+    cycleNumber: number;
+    residualLevel: string | null;
+    treatment: { id: string; action: string } | null;
+    decisionRequired: boolean;
+    canDecideInternal: boolean;
+    canDecideExternal: boolean;
+    links: Record<RiskResourceKind, string[]>;
+    assessments: Array<{
+        id: string;
+        phase: string;
+        revision: number;
+        category: string;
+        rationale: string;
+        methodologyVersionId: string;
+    }>;
+    decisions: Array<{
+        id: string;
+        status: string;
+        channel: string;
+        date: string;
+        rationale: string;
+        invalidated: boolean;
+        name: string | null;
+        function: string | null;
+    }>;
+}
+export interface RiskWorkspacePage {
+    referencePages: {
+        target: { current: number; last: number };
+        resource: { current: number; last: number };
+    };
+    organization: { id: string };
+    project: { id: string; name: string; status: string };
+    context: {
+        id: string;
+        methodologyVersionId: string;
+        catalogVersionId: string;
+    } | null;
+    filters: {
+        target_type?: string;
+        status?: string;
+        stale?: string;
+        threat?: string;
+        category?: string;
+        decision_required?: string;
+    };
+    capabilities: { write: boolean };
+    targets: RiskTarget[];
+    threats: RiskThreat[];
+    triggers: RiskTrigger[];
+    methodologies: MethodologyVersion[];
+    catalogs: CatalogVersion[];
+    resources: RiskResources;
+    cycles: {
+        data: RiskCycle[];
+        meta: { currentPage: number; lastPage: number; perPage: number };
+        links: { next: string | null; previous: string | null };
+    };
+}

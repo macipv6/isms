@@ -18,6 +18,9 @@ class RiskMethodologyController extends RiskController
 {
     public function index(Request $request): Response
     {
+        $filters = validator($request->query(), ['version_page' => ['nullable', 'integer', 'min:1']])->validate();
+        $safeQuery = http_build_query($filters);
+        Inertia::resolveUrlUsing(fn (Request $request): string => $request->getPathInfo().($safeQuery !== '' ? '?'.$safeQuery : ''));
         $canView = app(ProjectRiskPolicy::class)->viewGlobal($this->actor($request));
         abort_unless($canView, 403);
         $canPublish = app(ProjectRiskPolicy::class)->publishGlobal($this->actor($request));
@@ -26,18 +29,15 @@ class RiskMethodologyController extends RiskController
             $query->where('status', 'published');
         }
         $versions = [];
-        foreach ($query->limit(100)->get() as $version) {
-            $versions[] = [
-                'id' => $version->id, 'methodologyId' => $version->methodology_id,
-                'name' => $version->methodology->name, 'version' => $version->version,
-                'status' => $version->status->value, 'description' => mb_substr((string) $version->description, 0, 10000),
-                'publishedAt' => $version->published_at ? (string) $version->published_at : null,
-            ];
+        $page = $query->paginate(10, ['*'], 'version_page')->appends($filters);
+        foreach ($page->items() as $version) {
+            $versions[] = app(\App\Services\Risks\RiskVersionPresenter::class)->methodology($version);
         }
 
         return Inertia::render('risk-methodologies/Index', [
             'versions' => $versions,
             'capabilities' => ['publish' => $canPublish],
+            'pagination' => ['next' => $page->nextPageUrl(), 'previous' => $page->previousPageUrl()],
         ]);
     }
 

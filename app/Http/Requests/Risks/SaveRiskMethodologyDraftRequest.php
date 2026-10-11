@@ -30,9 +30,9 @@ class SaveRiskMethodologyDraftRequest extends FormRequest
             'levels.*.*.description' => ['nullable', 'string', 'max:10000'],
             'levels.*.*.sort_order' => ['required_with:levels', 'integer', 'min:0', 'max:1000'],
             'cells' => ['required_with:levels', 'array', 'max:400'],
-            'cells.*.frequency' => ['required_with:cells', 'string', 'max:64'],
-            'cells.*.impact' => ['required_with:cells', 'string', 'max:64'],
-            'cells.*.risk' => ['required_with:cells', 'string', 'max:64'],
+            'cells.*.frequency_key' => ['required_with:cells', 'string', 'max:64'],
+            'cells.*.impact_key' => ['required_with:cells', 'string', 'max:64'],
+            'cells.*.risk_key' => ['required_with:cells', 'string', 'max:64'],
         ];
     }
 
