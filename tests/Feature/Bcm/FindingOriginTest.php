@@ -123,9 +123,10 @@ class FindingOriginTest extends TestCase
         $data['id'] = (string) Str::uuid();
         $this->rejectSql(fn () => DB::table('bcm_exercise_results')->insert($data));
         $foreign = IsmsProject::factory()->create();
-        $this->rejectSql(fn () => DB::table('bcm_exercise_results')->insert([...$data, 'project_id' => $foreign->id]));
+        $this->rejectSql(fn () => DB::table('bcm_exercise_results')->where('id', $result->id)->update(['project_id' => $foreign->id]), '23503');
         $other = $this->exerciseResult($project, $actor);
-        $this->rejectSql(fn () => DB::table('bcm_exercise_results')->insert([...$data, 'bcm_exercise_id' => $other->bcm_exercise_id]));
+        $this->rejectSql(fn () => DB::table('bcm_exercise_results')->where('id', $result->id)->update(['bcm_exercise_id' => $other->bcm_exercise_id]), '23503');
+        $this->assertDatabaseHas('bcm_exercise_results', ['id' => $result->id, 'project_id' => $project->id, 'bcm_exercise_id' => $result->bcm_exercise_id, 'bcm_exercise_criterion_id' => $result->bcm_exercise_criterion_id]);
         $this->rejectSql(fn () => DB::table('bcm_exercise_criteria')->insert(['id' => (string) Str::uuid(), 'project_id' => $foreign->id, 'bcm_exercise_id' => $result->bcm_exercise_id, 'position' => 2]));
         $evidence = EvidenceFile::factory()->create(['project_id' => $foreign->id]);
         $this->rejectSql(fn () => DB::table('bcm_exercise_evidence_links')->insert(['id' => (string) Str::uuid(), 'project_id' => $project->id, 'bcm_exercise_id' => $result->bcm_exercise_id, 'evidence_id' => $evidence->id]));
@@ -227,13 +228,17 @@ class FindingOriginTest extends TestCase
         return ['id' => (string) Str::uuid(), 'project_id' => $project->id, 'origin_type' => 'bcm_exercise_result', 'project_assessment_id' => null, 'assessment_question_id' => null, 'bcm_exercise_result_id' => $result->id, 'title' => 'Recovery gap', 'description' => 'Observed gap', 'severity' => 'high', 'status' => 'proposed', 'proposed_by' => $actor->id, 'proposed_at' => now()];
     }
 
-    private function rejectSql(callable $operation): void
+    private function rejectSql(callable $operation, ?string $sqlState = null): void
     {
         try {
             DB::transaction($operation);
             $this->fail('Expected SQL provenance constraint failure.');
         } catch (QueryException $exception) {
-            $this->assertStringStartsWith('23', (string) $exception->getCode());
+            if ($sqlState !== null) {
+                $this->assertSame($sqlState, (string) $exception->getCode());
+            } else {
+                $this->assertStringStartsWith('23', (string) $exception->getCode());
+            }
         }
     }
 }
