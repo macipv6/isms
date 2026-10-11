@@ -4,12 +4,15 @@ namespace App\Services\Bcm;
 
 use App\Enums\BiaImpactArea;
 use App\Models\AssetRecoveryObjectiveRevision;
+use App\Models\BcmConflictAcceptance;
 use App\Models\BiaRevision;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
 class BiaReleaseValidator
 {
+    public function __construct(private readonly BcmConsistencyChecker $checker) {}
+
     public function validate(BiaRevision $revision): void
     {
         $this->validateRecovery($revision);
@@ -34,6 +37,12 @@ class BiaReleaseValidator
         }
         if ($errors !== []) {
             throw ValidationException::withMessages($errors);
+        }
+        $accepted = BcmConflictAcceptance::query()->where('project_id', $revision->project_id)->where('bia_revision_id', $revision->id)->pluck('fingerprint')->all();
+        foreach ($this->checker->warnings($revision) as $warning) {
+            if ($warning->blocking && ! in_array($warning->fingerprint, $accepted, true)) {
+                throw ValidationException::withMessages(['conflicts' => 'Bitte beheben Sie die blockierenden Warnungen oder akzeptieren Sie diese mit Begründung.']);
+            }
         }
     }
 

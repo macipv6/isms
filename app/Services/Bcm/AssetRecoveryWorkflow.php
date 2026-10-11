@@ -65,7 +65,7 @@ class AssetRecoveryWorkflow
         return DB::transaction(function () use ($revision, $expectedLockVersion, $actor) {
             [$project, $revision] = $this->locked($revision, $expectedLockVersion, $actor);
             $this->validator->validateRecovery($revision);
-            $revision->forceFill(['status' => BcmRevisionStatus::Approved, 'approved_by' => $actor->id, 'approved_at' => now(), 'lock_version' => $revision->lock_version + 1])->save();
+            $revision->forceFill(['source_snapshot' => ['asset_id' => $revision->asset_id, 'revision_id' => $revision->id, 'version' => $revision->version], 'status' => BcmRevisionStatus::Approved, 'approved_by' => $actor->id, 'approved_at' => now(), 'lock_version' => $revision->lock_version + 1])->save();
             $this->record('approved', $revision, $project, $actor, ['status']);
 
             return $revision;

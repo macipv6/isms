@@ -15,7 +15,7 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 class BiaWorkflow
 {
-    public function __construct(private readonly BcmProjectAccess $access, private readonly BiaConfigurationWorkflow $configuration, private readonly BiaReleaseValidator $validator, private readonly AuditLogger $audit) {}
+    public function __construct(private readonly BcmProjectAccess $access, private readonly BiaConfigurationWorkflow $configuration, private readonly BiaReleaseValidator $validator, private readonly AuditLogger $audit, private readonly BcmSourceSnapshot $sources, private readonly BcmConsistencyChecker $checker) {}
 
     public function draft(BusinessProcess $process, User $actor): BiaRevision
     {
@@ -110,8 +110,10 @@ class BiaWorkflow
     {
         return DB::transaction(function () use ($revision, $expectedLockVersion, $actor) {
             [$project, $revision] = $this->locked($revision, $expectedLockVersion, $actor);
+            $this->sources->lockProjectSources($project);
             $this->validator->validate($revision);
-            $revision->forceFill(['status' => BcmRevisionStatus::Approved, 'approved_by' => $actor->id, 'approved_at' => now(), 'lock_version' => $revision->lock_version + 1])->save();
+            $snapshot = ['sources' => $this->sources->bia($revision), 'warning_fingerprints' => array_column($this->checker->warnings($revision), 'fingerprint')];
+            $revision->forceFill(['source_snapshot' => $snapshot, 'status' => BcmRevisionStatus::Approved, 'approved_by' => $actor->id, 'approved_at' => now(), 'lock_version' => $revision->lock_version + 1])->save();
             $this->record('approved', $revision, $project, $actor, ['status']);
 
             return $revision;
