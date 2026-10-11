@@ -1,4 +1,8 @@
-export type RegisterKind = 'processes' | 'assets' | 'dependencies' | 'protection_needs';
+export type RegisterKind =
+    | 'processes'
+    | 'assets'
+    | 'dependencies'
+    | 'protection_needs';
 export type RegisterStateFilter = 'active' | 'inactive';
 export type AssetType =
     | 'information'

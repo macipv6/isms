@@ -21,6 +21,11 @@ const tabs: Array<{ key: ProjectWorkTab; label: string; href: string }> = [
         label: 'Abhängigkeiten',
         href: `${base}/dependencies`,
     },
+    {
+        key: 'protection-needs',
+        label: 'Schutzbedarf',
+        href: `${base}/protection-needs`,
+    },
 ];
 </script>
 

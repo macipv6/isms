@@ -5,7 +5,8 @@ export type ProjectWorkTab =
     | 'measures'
     | 'processes'
     | 'assets'
-    | 'dependencies';
+    | 'dependencies'
+    | 'protection-needs';
 
 export type EvidenceReviewStatus = 'pending_review' | 'verified' | 'rejected';
 export type EvidenceFileKind =

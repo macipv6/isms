@@ -65,6 +65,12 @@ function confirm(): void {
                         <th class="px-3 py-2">Referenz</th>
                         <th class="px-3 py-2">Ergebnis</th>
                         <th class="px-3 py-2">Feld / Fehler</th>
+                        <th
+                            v-if="preview.kind === 'protection_needs'"
+                            class="px-3 py-2"
+                        >
+                            Herabstufung
+                        </th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-800">
@@ -84,6 +90,16 @@ function confirm(): void {
                                 [row.field, row.code]
                                     .filter(Boolean)
                                     .join(' · ') || '–'
+                            }}
+                        </td>
+                        <td
+                            v-if="preview.kind === 'protection_needs'"
+                            class="px-3 py-2"
+                        >
+                            {{
+                                row.requires_downgrade_approval
+                                    ? 'Freigabe erforderlich – noch nicht wirksam'
+                                    : '–'
                             }}
                         </td>
                     </tr>

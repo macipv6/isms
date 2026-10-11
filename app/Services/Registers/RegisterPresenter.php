@@ -281,7 +281,7 @@ class RegisterPresenter
     }
 
     /** @return array<string, mixed>|null */
-    private function importPreview(Request $request, IsmsProject $project, RegisterImportKind $kind, bool $writable, string $base): ?array
+    public function importPreview(Request $request, IsmsProject $project, RegisterImportKind $kind, bool $writable, string $base): ?array
     {
         $batchId = $request->query('batch');
         if (! is_string($batchId) || $batchId === '') {
