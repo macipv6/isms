@@ -2,9 +2,11 @@
 
 namespace App\Services\Evidence;
 
+use App\Enums\FindingOrigin;
 use App\Enums\ProjectStatus;
 use App\Enums\UserRole;
 use App\Models\AssessmentQuestion;
+use App\Models\BcmExerciseResult;
 use App\Models\EvidenceFile;
 use App\Models\Finding;
 use App\Models\IsmsProject;
@@ -76,20 +78,30 @@ class EvidenceLinkService
                 $this->reject('Die Feststellung gehört nicht zu diesem Projekt.');
             }
 
-            $assessment = ProjectAssessment::query()
-                ->whereKey($lockedFinding->project_assessment_id)
-                ->where('project_id', $lockedProject->id)
-                ->lockForUpdate()
-                ->first();
-
-            if (! $assessment instanceof ProjectAssessment) {
-                $this->reject('Die Feststellung gehört nicht zu dieser Bewertung.');
+            if ($lockedFinding->origin_type === FindingOrigin::AssessmentQuestion) {
+                $assessment = ProjectAssessment::query()
+                    ->whereKey($lockedFinding->project_assessment_id)
+                    ->where('project_id', $lockedProject->id)
+                    ->lockForUpdate()
+                    ->first();
+                if (! $assessment instanceof ProjectAssessment) {
+                    $this->reject('Die Feststellung gehört nicht zu dieser Bewertung.');
+                }
+            } else {
+                $result = BcmExerciseResult::query()
+                    ->whereKey($lockedFinding->bcm_exercise_result_id)
+                    ->where('project_id', $lockedProject->id)
+                    ->lockForUpdate()
+                    ->first();
+                if (! $result instanceof BcmExerciseResult) {
+                    $this->reject('Die Feststellung gehört nicht zu einem Übungsergebnis dieses Projekts.');
+                }
             }
 
             $linked = DB::table('evidence_finding_links')->insertOrIgnore([
                 'id' => (string) Str::uuid(),
                 'project_id' => $lockedProject->id,
-                'project_assessment_id' => $assessment->id,
+                'project_assessment_id' => $lockedFinding->project_assessment_id,
                 'finding_id' => $lockedFinding->id,
                 'evidence_file_id' => $lockedEvidence->id,
                 'created_at' => now(),
@@ -149,19 +161,19 @@ class EvidenceLinkService
 
     private function lockedWritableProject(IsmsProject $project, User $actor): IsmsProject
     {
-        $actor->loadMissing('organization');
-
-        if (! $actor->is_active
-            || $actor->organization?->organization_type !== 'internal'
-            || ! in_array($actor->role, [UserRole::Admin, UserRole::Consultant], true)) {
-            $this->reject('Die Aktion ist nicht zulässig.');
-        }
-
         $lockedProject = IsmsProject::query()
             ->with('organization')
             ->whereKey($project->id)
             ->lockForUpdate()
             ->first();
+        $current = User::query()->with('organization')->whereKey($actor->id)->lockForUpdate()->first();
+
+        if (! $current?->is_active
+            || ! $current->organization?->is_active
+            || $current->organization->organization_type !== 'internal'
+            || ! in_array($current->role, [UserRole::Admin, UserRole::Consultant], true)) {
+            $this->reject('Die Aktion ist nicht zulässig.');
+        }
 
         if (! $lockedProject instanceof IsmsProject
             || $lockedProject->organization?->organization_type !== 'customer'

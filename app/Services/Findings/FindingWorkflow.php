@@ -5,6 +5,7 @@ namespace App\Services\Findings;
 use App\Data\Dependencies\DependencyNode;
 use App\Enums\AssessmentStatus;
 use App\Enums\ComplianceStatus;
+use App\Enums\FindingOrigin;
 use App\Enums\FindingSeverity;
 use App\Enums\FindingStatus;
 use App\Enums\MeasureStatus;
@@ -60,6 +61,7 @@ class FindingWorkflow
                 'project_id' => $lockedProject->id,
                 'project_assessment_id' => $assessment->id,
                 'assessment_question_id' => $lockedQuestion->id,
+                'origin_type' => FindingOrigin::AssessmentQuestion,
                 'status' => FindingStatus::Proposed,
                 'proposed_by' => $actor->id,
                 'proposed_at' => now(),
@@ -239,6 +241,7 @@ class FindingWorkflow
 
     private function lockedWritableProject(IsmsProject $project, User $actor): IsmsProject
     {
+        $locked = IsmsProject::query()->with('organization')->whereKey($project->id)->lockForUpdate()->first();
         $current = User::query()->with('organization')->lockForUpdate()->find($actor->id);
         if (! $current?->is_active
             || ! $current->organization?->is_active
@@ -247,7 +250,6 @@ class FindingWorkflow
             $this->reject('Die Aktion ist nicht zulässig.');
         }
 
-        $locked = IsmsProject::query()->with('organization')->whereKey($project->id)->lockForUpdate()->first();
         if (! $locked instanceof IsmsProject
             || $locked->organization?->organization_type !== 'customer'
             || ! $locked->organization->is_active

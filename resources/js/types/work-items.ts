@@ -22,6 +22,13 @@ export type EvidenceFileKind =
 
 export type FindingStatus = 'proposed' | 'accepted' | 'rejected' | 'closed';
 export type FindingSeverity = 'low' | 'medium' | 'high' | 'critical';
+export type FindingOrigin = 'assessment_question' | 'bcm_exercise_result';
+
+export interface FindingOriginReference {
+    type: FindingOrigin;
+    id: string;
+    label: string;
+}
 
 export type MeasureStatus =
     | 'planned'
@@ -66,9 +73,11 @@ export interface FindingRegisterItem {
     severity: FindingSeverity;
     status: FindingStatus;
     proposed_at: string;
-    question_id: string;
-    question_key: string;
-    question_title: string;
+    origin_type: FindingOrigin;
+    origin: FindingOriginReference;
+    question_id: string | null;
+    question_key: string | null;
+    question_title: string | null;
     measures: {
         total: number;
         terminal: number;
@@ -88,8 +97,10 @@ export interface MeasureRegisterItem {
         id: string;
         title: string;
         status: FindingStatus;
-        question_id: string;
-        question_key: string;
-        question_title: string;
+        origin_type: FindingOrigin;
+        origin: FindingOriginReference;
+        question_id: string | null;
+        question_key: string | null;
+        question_title: string | null;
     };
 }
