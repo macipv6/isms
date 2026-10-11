@@ -23,8 +23,8 @@ class ProtectionNeedPageTest extends TestCase
     public function test_workspace_exposes_bounded_cia_rows_sources_pending_downgrade_and_named_actions(): void
     {
         [$customer, $project, $actor] = $this->context();
-        $process = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'PROC-1', 'name' => 'Auftrag']);
-        $asset = Asset::factory()->for($project, 'project')->create(['key' => 'ASSET-1', 'name' => 'Dienst']);
+        $process = BusinessProcess::factory()->for($project, 'project')->create(['key' => 'SERVICE-1', 'name' => 'Auftrag']);
+        $asset = Asset::factory()->for($project, 'project')->create(['key' => 'SERVICE-1', 'name' => 'Dienst']);
         $edge = DependencyEdge::query()->create([
             'project_id' => $project->id, 'source_process_id' => $process->id, 'target_asset_id' => $asset->id,
             'importance' => 'supporting', 'is_active' => true, 'created_by' => $actor->id,
@@ -59,7 +59,7 @@ class ProtectionNeedPageTest extends TestCase
                 ->where('actions.previewImport', $base.'/imports/protection_needs/preview')
                 ->where('needs.meta.perPage', 25)
                 ->has('needs.data', 1)
-                ->where('needs.data.0.target.key', 'ASSET-1')
+                ->where('needs.data.0.target.key', 'SERVICE-1')
                 ->where('needs.data.0.directLevel', 'normal')
                 ->where('needs.data.0.inheritedLevel', 'high')
                 ->where('needs.data.0.effectiveLevel', 'high')
@@ -78,9 +78,10 @@ class ProtectionNeedPageTest extends TestCase
                 ->where('needs.data.0.downgrade.requestedLevel', 'normal')
                 ->where('needs.data.0.downgrade.canDecideInternal', false)
                 ->where('needs.data.0.downgrade.actions.decide', $base.'/downgrades/'.$downgrade->id.'/decision')
-                ->where('needs.data.0.sources.0.source.key', 'PROC-1')
-                ->where('needs.data.0.sources.0.path.0', 'PROC-1')
-                ->where('needs.data.0.sources.0.path.1', 'ASSET-1')
+                ->where('needs.data.0.sources.0.source.key', 'SERVICE-1')
+                ->has('needs.data.0.sources.0.path', 2)
+                ->where('needs.data.0.sources.0.path.0', 'SERVICE-1 (Prozess)')
+                ->where('needs.data.0.sources.0.path.1', 'SERVICE-1 (Asset)')
                 ->missing('needs.data.0.sources.0.first_edge_id')
                 ->missing('needs.data.0.downgrade.rationale'));
 

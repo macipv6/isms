@@ -69,9 +69,22 @@ class ProtectionNeedPresenter
                 $origin = $sourceType === 'process' ? $processes->get($source->origin_process_id) : $assets->get($source->origin_asset_id);
                 $firstEdge = $edges->get($source->first_edge_id);
                 $next = $firstEdge?->target_process_id ? $processes->get($firstEdge->target_process_id) : $assets->get($firstEdge?->target_asset_id);
-                $path = array_values(array_unique(array_filter([$origin?->key, $next?->key, $target?->key])));
-                if ($next && $target && $next->id !== $target->id) {
-                    array_splice($path, 2, 0, ['…']);
+                $nextType = $firstEdge?->target_process_id ? 'process' : 'asset';
+                $path = [];
+                $previousIdentity = null;
+                foreach ([[$origin, $sourceType], [$next, $nextType], [$target, $targetType]] as $position => [$node, $nodeType]) {
+                    if (! $node) {
+                        continue;
+                    }
+                    $identity = $nodeType.':'.$node->id;
+                    if ($identity === $previousIdentity) {
+                        continue;
+                    }
+                    if ($position === 2 && $next && $nextType.':'.$next->id !== $identity) {
+                        $path[] = '…';
+                    }
+                    $path[] = $node->key.' ('.($nodeType === 'process' ? 'Prozess' : 'Asset').')';
+                    $previousIdentity = $identity;
                 }
                 $sourceRows[] = [
                     'source' => ['type' => $sourceType, 'id' => $origin?->id, 'key' => $origin?->key ?? 'Unbekannt', 'name' => $origin?->name ?? 'Unbekannt'],

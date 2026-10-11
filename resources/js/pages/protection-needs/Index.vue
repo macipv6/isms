@@ -153,7 +153,7 @@ function filter(): void {
                 }}
             </p>
             <ProtectionNeedForm
-                :key="`${selectedNeed.id}-${selectedNeed.expectedVersions.confidentiality}-${selectedNeed.expectedVersions.integrity}-${selectedNeed.expectedVersions.availability}`"
+                :key="selectedNeed.id"
                 :need="selectedNeed"
                 :can-write="capabilities.write"
             />

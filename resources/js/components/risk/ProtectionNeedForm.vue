@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { router, useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, nextTick } from 'vue';
 import FormErrorList from '@/components/FormErrorList.vue';
 import {
     levelLabels,
@@ -75,6 +75,7 @@ function rate(): void {
         ratingForm.put(props.need.actions.rate, {
             preserveScroll: true,
             errorBag: 'protectionRate',
+            onSuccess: syncForms,
         });
     }
 }
@@ -83,6 +84,7 @@ function approve(): void {
         approvalForm.post(props.need.actions.approve, {
             preserveScroll: true,
             errorBag: 'protectionApprove',
+            onSuccess: syncForms,
         });
     }
 }
@@ -91,9 +93,38 @@ function requestDowngrade(): void {
         requestForm.post(props.need.actions.requestDowngrade, {
             preserveScroll: true,
             errorBag: 'protectionDowngradeRequest',
-            onSuccess: () => requestForm.reset('rationale'),
+            onSuccess: syncForms,
         });
     }
+}
+async function syncForms(): Promise<void> {
+    await nextTick();
+    ratingForm.defaults({
+        ratings: {
+            [props.need.objective]: {
+                level: props.need.directLevel ?? 'normal',
+                rationale: props.need.directRationale,
+            },
+        },
+        expected_versions: { ...props.need.expectedVersions },
+    });
+    approvalForm.defaults({
+        expected_versions: { ...props.need.expectedVersions },
+    });
+    requestForm.defaults({
+        action: 'request',
+        requested_level: props.need.directLevel ?? 'normal',
+        rationale: '',
+    });
+    ratingForm.reset();
+    approvalForm.reset();
+    requestForm.reset();
+    ratingForm.clearErrors();
+    approvalForm.clearErrors();
+    requestForm.clearErrors();
+}
+function reload(): void {
+    router.reload({ onSuccess: syncForms });
 }
 </script>
 
@@ -145,11 +176,7 @@ function requestDowngrade(): void {
             <p v-if="ratingConflict" class="mt-2 text-amber-200" role="alert">
                 Der Schutzbedarf hat sich geändert. Bitte laden Sie die
                 aktuellen Werte neu.
-                <button
-                    type="button"
-                    class="underline"
-                    @click="router.reload()"
-                >
+                <button type="button" class="underline" @click="reload">
                     Neu laden
                 </button>
             </p>
@@ -178,11 +205,7 @@ function requestDowngrade(): void {
             />
             <p v-if="approvalConflict" class="mt-2 text-amber-200" role="alert">
                 Der Schutzbedarf hat sich geändert.
-                <button
-                    type="button"
-                    class="underline"
-                    @click="router.reload()"
-                >
+                <button type="button" class="underline" @click="reload">
                     Neu laden
                 </button>
             </p>
