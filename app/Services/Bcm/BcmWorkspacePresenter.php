@@ -17,15 +17,16 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator as ArrayPaginator;
-use Inertia\Inertia;
+use Inertia\Response;
+use Inertia\ResponseFactory;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class BcmWorkspacePresenter
 {
     public function __construct(private readonly BcmFreshness $freshness, private readonly BcmConsistencyChecker $checker) {}
 
-    /** @return array<string, mixed> */
-    public function base(Request $request, IsmsProject $project): array
+    /** @param array<string, mixed> $props */
+    public function render(Request $request, string $component, array $props): Response
     {
         $allowed = [];
         foreach (['page', 'history_page', 'sources_page', 'conflicts_page', 'results_page', 'assets_page', 'findings_page', 'measures_page'] as $key) {
@@ -34,7 +35,17 @@ class BcmWorkspacePresenter
             }
         }
         $query = http_build_query($allowed);
-        Inertia::resolveUrlUsing(fn (Request $r): string => $r->getPathInfo().($query !== '' ? '?'.$query : ''));
+        // Factory render captures its resolver on the response. Keep the singleton
+        // unchanged so subsequent existing pages retain their own query strings.
+        $factory = clone app(ResponseFactory::class);
+        $factory->resolveUrlUsing(fn (Request $r): string => $r->getPathInfo().($query !== '' ? '?'.$query : ''));
+
+        return $factory->render($component, $props);
+    }
+
+    /** @return array<string, mixed> */
+    public function base(Request $request, IsmsProject $project): array
+    {
         $configuration = app(BiaConfigurationWorkflow::class)->current($project);
 
         return [

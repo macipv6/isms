@@ -5,25 +5,25 @@ namespace App\Http\Controllers;
 use App\Http\BcmRouteScope;
 use App\Models\BiaRevision;
 use App\Models\BusinessProcess;
+use App\Services\Bcm\BcmWorkspacePresenter;
 use App\Services\Bcm\BiaPresenter;
 use App\Services\Bcm\BiaWorkflow;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
 use Inertia\Response;
 
 class BiaController extends Controller
 {
     public function index(Request $request, BiaPresenter $presenter): Response
     {
-        return Inertia::render('bcm/Bia', $presenter->index($request, BcmRouteScope::project($request, false)));
+        return app(BcmWorkspacePresenter::class)->render($request, 'bcm/Bia', $presenter->index($request, BcmRouteScope::project($request, false)));
     }
 
     public function show(Request $request, BiaPresenter $presenter): Response
     {
         $project = BcmRouteScope::project($request, false);
 
-        return Inertia::render('bcm/Bia', $presenter->show($request, $project, BcmRouteScope::child($request, $project, 'revision', BiaRevision::class)));
+        return app(BcmWorkspacePresenter::class)->render($request, 'bcm/Bia', $presenter->show($request, $project, BcmRouteScope::child($request, $project, 'revision', BiaRevision::class)));
     }
 
     public function store(Request $request, BiaWorkflow $workflow): RedirectResponse

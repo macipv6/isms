@@ -7,23 +7,23 @@ use App\Models\BcmExercise;
 use App\Models\ContinuityPlanRevision;
 use App\Services\Bcm\BcmExercisePresenter;
 use App\Services\Bcm\BcmExerciseWorkflow;
+use App\Services\Bcm\BcmWorkspacePresenter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
 use Inertia\Response;
 
 class BcmExerciseController extends Controller
 {
     public function index(Request $request, BcmExercisePresenter $presenter): Response
     {
-        return Inertia::render('bcm/Exercises', $presenter->index($request, BcmRouteScope::project($request, false)));
+        return app(BcmWorkspacePresenter::class)->render($request, 'bcm/Exercises', $presenter->index($request, BcmRouteScope::project($request, false)));
     }
 
     public function show(Request $request, BcmExercisePresenter $presenter): Response
     {
         $project = BcmRouteScope::project($request, false);
 
-        return Inertia::render('bcm/Exercises', $presenter->show($request, $project, BcmRouteScope::child($request, $project, 'exercise', BcmExercise::class)));
+        return app(BcmWorkspacePresenter::class)->render($request, 'bcm/Exercises', $presenter->show($request, $project, BcmRouteScope::child($request, $project, 'exercise', BcmExercise::class)));
     }
 
     public function store(Request $request, BcmExerciseWorkflow $workflow): RedirectResponse

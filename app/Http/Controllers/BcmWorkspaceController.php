@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Http\BcmRouteScope;
 use App\Services\Bcm\BcmWorkspacePresenter;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
 use Inertia\Response;
 
 class BcmWorkspaceController extends Controller
@@ -14,6 +13,6 @@ class BcmWorkspaceController extends Controller
     {
         $project = BcmRouteScope::project($request, false);
 
-        return Inertia::render('bcm/Index', $presenter->base($request, $project));
+        return $presenter->render($request, 'bcm/Index', $presenter->base($request, $project));
     }
 }

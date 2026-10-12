@@ -6,10 +6,10 @@ use App\Http\BcmRouteScope;
 use App\Models\Asset;
 use App\Models\AssetRecoveryObjectiveRevision;
 use App\Services\Bcm\AssetRecoveryWorkflow;
+use App\Services\Bcm\BcmWorkspacePresenter;
 use App\Services\Bcm\BiaPresenter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
 use Inertia\Response;
 
 class AssetRecoveryController extends Controller
@@ -20,7 +20,7 @@ class AssetRecoveryController extends Controller
         $asset = BcmRouteScope::child($request, $project, 'asset', Asset::class);
         $revision = $request->route('revision') !== null ? BcmRouteScope::child($request, $project, 'revision', AssetRecoveryObjectiveRevision::class) : null;
 
-        return Inertia::render('bcm/AssetRecovery', $presenter->asset($request, $project, $asset, $revision));
+        return app(BcmWorkspacePresenter::class)->render($request, 'bcm/AssetRecovery', $presenter->asset($request, $project, $asset, $revision));
     }
 
     public function store(Request $request, AssetRecoveryWorkflow $workflow): RedirectResponse

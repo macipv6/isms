@@ -111,4 +111,16 @@ class BcmPageContractTest extends TestCase
         $this->assertNotSame($original->id, $successor->id);
         $this->actingAs($actor)->get("/projects/{$project->id}/bcm/bia/{$bia->id}")->assertOk()->assertInertia(fn (Assert $page) => $page->where('sources.data.0.revision_id', $original->id)->where('sources.data.0.version', 1)->where('revision.freshness.current', false)->where('revision.status', 'approved'));
     }
+
+    public function test_bcm_url_sanitization_does_not_leak_into_next_existing_page_in_same_application(): void
+    {
+        [$project, $actor] = $this->bcmProject();
+        $base = "/projects/{$project->id}/bcm";
+        $this->actingAs($actor)->get($base.'?page=2&storage_path=poison')->assertOk()->assertInertia(fn (Assert $page) => $page->url($base.'?page=2'));
+
+        $existingUrl = "/organizations/{$project->organization_id}/projects/{$project->id}/processes?key=Recovery&state=active";
+        $this->get($existingUrl)->assertOk()->assertInertia(fn (Assert $page) => $page->component('processes/Index', false)->where('filters.key', 'Recovery')->where('filters.state', 'active')->url($existingUrl));
+
+        $this->get($base.'?history_page=3&storage_path=other-poison')->assertOk()->assertInertia(fn (Assert $page) => $page->url($base.'?history_page=3'));
+    }
 }
