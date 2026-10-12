@@ -183,6 +183,11 @@ class BcmSourceSnapshot
         ksort($bias);
         ksort($processIds);
         ksort($assetIds);
+        $assetObjectives = [];
+        foreach (array_keys($assetIds) as $id) {
+            $objective = AssetRecoveryObjectiveRevision::query()->where('project_id', $exercise->project_id)->where('asset_id', $id)->where('status', 'approved')->orderByDesc('version')->first();
+            $assetObjectives[$id] = $objective ? $this->objective($objective) : null;
+        }
         $active = [];
         foreach (['process' => [BusinessProcess::class, array_keys($processIds)], 'asset' => [Asset::class, array_keys($assetIds)]] as $type => [$model, $ids]) {
             foreach ($ids as $id) {
@@ -200,7 +205,7 @@ class BcmSourceSnapshot
         $head = ContinuityPlanRevision::query()->where('project_id', $exercise->project_id)->where('continuity_plan_id', $plan->continuity_plan_id)->where('status', 'approved')->orderByDesc('version')->first();
         $configuration = $this->configuration->current($plan->project);
 
-        return ['plan_revision_id' => $plan->id, 'approved_head_id' => $head?->id, 'configuration' => ['id' => $configuration?->id, 'version' => $configuration?->version, 'minutes' => $configuration?->minutes], 'plan_sources' => $current, 'bia_sources' => $bias, 'active_targets' => $active, 'evidence' => $evidence];
+        return ['plan_revision_id' => $plan->id, 'approved_head_id' => $head?->id, 'configuration' => ['id' => $configuration?->id, 'version' => $configuration?->version, 'minutes' => $configuration?->minutes], 'plan_sources' => $current, 'bia_sources' => $bias, 'asset_objectives' => $assetObjectives, 'active_targets' => $active, 'evidence' => $evidence];
     }
 
     /** @return array<string, mixed> */

@@ -2,11 +2,14 @@
 
 namespace Tests\Feature\Bcm;
 
+use App\Models\Asset;
 use App\Models\BcmExercise;
 use App\Models\BusinessProcess;
 use App\Models\DependencyEdge;
 use App\Models\EvidenceFile;
 use App\Models\User;
+use App\Services\Bcm\AssetRecoveryWorkflow;
+use App\Services\Bcm\BcmExerciseReleaseValidator;
 use App\Services\Bcm\BcmExerciseWorkflow;
 use App\Services\Bcm\BcmFreshness;
 use App\Services\Bcm\BiaConfigurationWorkflow;
@@ -241,6 +244,40 @@ class BcmExerciseTest extends TestCase
             $this->assertSame(4, $exercise->fresh()->lock_version);
         }
         $exercise = $w->record($exercise, ['source_change_reason' => 'Reviewed target successor'], 4, $actor);
+        $this->assertSame('completed', $w->complete($exercise, 5, $actor)->status->value);
+    }
+
+    public function test_deactivated_process_cannot_conceal_relevant_asset_successor_from_acknowledgement(): void
+    {
+        [$project, $actor] = $this->bcmProject();
+        $original = $this->approvedPlan($project, $actor);
+        $root = $original->processes()->sole()->process;
+        $asset = Asset::factory()->create(['project_id' => $project->id]);
+        $aw = app(AssetRecoveryWorkflow::class);
+        $aw->approve($aw->save($aw->draft($asset, $actor), ['rto_minutes' => 60, 'rpo_minutes' => 0, 'target_reason' => 'Reviewed asset recovery'], 1, $actor), 2, $actor);
+        DependencyEdge::factory()->create(['project_id' => $project->id, 'source_process_id' => $root->id, 'target_asset_id' => $asset->id, 'importance' => 'critical']);
+        $bia = app(BiaWorkflow::class);
+        $bia->approve($bia->draft($root, $actor), 1, $actor);
+        $pw = app(ContinuityPlanWorkflow::class);
+        $plan = $pw->approve($pw->revise($original, $actor), 1, $actor);
+        $w = app(BcmExerciseWorkflow::class);
+        $exercise = $w->plan($w->create($plan, $this->exerciseData(), $actor), 1, $actor);
+        $exercise = $w->record($exercise, $this->resultData($exercise), 2, $actor);
+        $root->update(['is_active' => false]);
+        $exercise = $w->record($exercise, ['source_change_reason' => 'Historical exercise preceded process deactivation'], 3, $actor);
+        $draft = $aw->draft($asset, $actor);
+        $unrelated = Asset::factory()->create(['project_id' => $project->id]);
+        $aw->approve($aw->save($aw->draft($unrelated, $actor), ['rto_minutes' => 60, 'rpo_minutes' => 0, 'target_reason' => 'Unrelated recovery objective'], 1, $actor), 2, $actor);
+        app(BcmExerciseReleaseValidator::class)->complete($exercise);
+        $aw->approve($draft, 1, $actor);
+        try {
+            $w->complete($exercise, 4, $actor);
+            $this->fail('Deactivated process concealed asset successor approval.');
+        } catch (ValidationException) {
+            $this->assertSame(4, $exercise->fresh()->lock_version);
+            $this->assertSame('conducted', $exercise->fresh()->status->value);
+        }
+        $exercise = $w->record($exercise, ['source_change_reason' => 'Reviewed asset successor for historical exercise'], 4, $actor);
         $this->assertSame('completed', $w->complete($exercise, 5, $actor)->status->value);
     }
 
