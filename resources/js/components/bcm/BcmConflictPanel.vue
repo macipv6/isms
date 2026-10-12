@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Link, router, useForm } from '@inertiajs/vue3';
+import { reactive, watch } from 'vue';
 import FormErrorList from '@/components/FormErrorList.vue';
 import { conflictLabel, useBcmFormState } from './biaState';
 import type { BcmConflict, BcmPagination } from '@/types/bcm';
@@ -10,15 +11,27 @@ const props = defineProps<{
     canAccept: boolean;
     editsPending?: boolean;
 }>();
-const forms = new Map(
-    props.conflicts.data.map((warning) => [
-        warning.fingerprint,
-        useForm({
-            fingerprint: warning.fingerprint,
-            reason: '',
-            lock_version: props.lockVersion,
-        }),
-    ]),
+function conflictForm(fingerprint: string) {
+    return useForm({
+        fingerprint,
+        reason: '',
+        lock_version: props.lockVersion,
+    });
+}
+const forms = reactive(new Map<string, ReturnType<typeof conflictForm>>());
+watch(
+    () => props.conflicts.data.map((warning) => warning.fingerprint),
+    (fingerprints) => {
+        const current = new Set(fingerprints);
+        for (const fingerprint of forms.keys()) {
+            if (!current.has(fingerprint)) forms.delete(fingerprint);
+        }
+        for (const fingerprint of current) {
+            if (!forms.has(fingerprint))
+                forms.set(fingerprint, conflictForm(fingerprint));
+        }
+    },
+    { immediate: true },
 );
 const generation = { lock_version: props.lockVersion };
 const state = useBcmFormState(generation, () => props.lockVersion);

@@ -174,6 +174,92 @@ assert.equal(
     display.conflictLabel('dependency_target_unknown'),
     'Ziel der Abhängigkeit unbekannt',
 );
+const warning = {
+    code: 'dependency_target_unknown',
+    target_type: 'asset',
+    target_id: 'asset-1',
+    target_name: 'Datenbank',
+    revision_id: null,
+    blocking: true,
+    path_edge_ids: ['edge-1'],
+    accepted: false,
+    acceptance_id: null,
+};
+const changedWarning = { ...warning, fingerprint: 'new-source-fingerprint' };
+const conflictProps = reactive({
+    conflicts: {
+        data: [
+            { ...warning, fingerprint: 'old-source-fingerprint' },
+            { ...warning, fingerprint: 'unchanged-fingerprint' },
+        ],
+        current_page: 1,
+        last_page: 1,
+        total: 2,
+        prev_page_url: null,
+        next_page_url: null,
+    },
+    base: '/bcm/bia/bia-1',
+    lockVersion: 5,
+    canAccept: true,
+    editsPending: false,
+});
+const conflicts = setup('BcmConflictPanel.vue', conflictProps);
+conflicts.forms.get('old-source-fingerprint').reason =
+    'Begründung für alte Quellen';
+conflicts.forms.get('unchanged-fingerprint').reason = 'Unveränderte Begründung';
+let acceptanceOptions;
+conflicts.forms.get('old-source-fingerprint').post = (_url, options) => {
+    acceptanceOptions = options;
+};
+conflicts.accept(conflictProps.conflicts.data[0]);
+assert.equal(acceptanceOptions.onHttpException({ status: 409 }), false);
+assert.equal(conflicts.state.stale.value, true);
+const originalReload = inertia.router.reload.bind(inertia.router);
+try {
+    inertia.router.reload = (options) => {
+        conflictProps.conflicts.data = [
+            changedWarning,
+            { ...warning, fingerprint: 'unchanged-fingerprint' },
+        ];
+        options.onSuccess();
+    };
+    conflicts.reload();
+    await nextTick();
+} finally {
+    inertia.router.reload = originalReload;
+}
+assert.equal(
+    conflictProps.lockVersion,
+    5,
+    'Dependency refresh does not change the BIA generation',
+);
+assert.equal(
+    typeof conflicts.forms.get(changedWarning.fingerprint),
+    'object',
+    'Reload creates an acceptance form for the changed warning in the same component',
+);
+assert.equal(conflicts.state.stale.value, false);
+assert.equal(conflicts.forms.has('old-source-fingerprint'), false);
+assert.equal(
+    conflicts.forms.get(changedWarning.fingerprint).reason,
+    '',
+    'Changed warnings cannot inherit reasons for old sources',
+);
+assert.equal(
+    conflicts.forms.get('unchanged-fingerprint').reason,
+    'Unveränderte Begründung',
+);
+const freshForm = conflicts.forms.get(changedWarning.fingerprint);
+freshForm.reason = 'Neue Quellen geprüft';
+let submitted;
+freshForm.post = (url) => {
+    submitted = { url, ...freshForm.data() };
+};
+conflicts.accept(changedWarning);
+assert.equal(submitted.url, '/bcm/bia/bia-1/conflicts');
+assert.equal(submitted.fingerprint, 'new-source-fingerprint');
+assert.equal(submitted.reason, 'Neue Quellen geprüft');
+assert.equal(submitted.lock_version, 5);
 console.log(
     'BIA Vue/Inertia state checks passed (zero, custom times, 409, history, critical/unknown display).',
 );
