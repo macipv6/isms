@@ -4,6 +4,8 @@ namespace App\Services\Findings;
 
 use App\Data\Dependencies\DependencyNode;
 use App\Enums\AssessmentStatus;
+use App\Enums\BcmExerciseOutcome;
+use App\Enums\BcmExerciseStatus;
 use App\Enums\ComplianceStatus;
 use App\Enums\FindingOrigin;
 use App\Enums\FindingSeverity;
@@ -13,6 +15,8 @@ use App\Enums\ProjectStatus;
 use App\Enums\UserRole;
 use App\Models\AssessmentQuestion;
 use App\Models\Asset;
+use App\Models\BcmExercise;
+use App\Models\BcmExerciseResult;
 use App\Models\BusinessProcess;
 use App\Models\Finding;
 use App\Models\IsmsProject;
@@ -22,12 +26,14 @@ use App\Models\ProjectAssessment;
 use App\Models\User;
 use App\Services\Assessment\ApplicabilityEvaluator;
 use App\Services\Audit\AuditLogger;
+use App\Services\Bcm\BcmProjectAccess;
 use App\Services\Risks\RiskChangeInvalidator;
 use App\Services\Risks\RiskTriggerEvaluator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 class FindingWorkflow
 {
@@ -36,6 +42,7 @@ class FindingWorkflow
         private readonly AuditLogger $audit,
         private readonly RiskTriggerEvaluator $triggers,
         private readonly RiskChangeInvalidator $risks,
+        private readonly BcmProjectAccess $bcmAccess,
     ) {}
 
     /** @param array<string, mixed> $data */
@@ -71,6 +78,35 @@ class FindingWorkflow
                 'finding_id' => $finding->id,
                 'new_status' => FindingStatus::Proposed->value,
             ], $lockedProject->organization_id);
+
+            return $finding;
+        });
+    }
+
+    /** @param array<string, mixed> $data */
+    public function proposeFromExercise(BcmExerciseResult $result, array $data, User $actor): Finding
+    {
+        return DB::transaction(function () use ($result, $data, $actor): Finding {
+            $project = $this->bcmAccess->lockedWritable(IsmsProject::query()->findOrFail($result->project_id), $actor);
+            $exercise = BcmExercise::query()->whereKey($result->bcm_exercise_id)->where('project_id', $project->id)->lockForUpdate()->firstOrFail();
+            $result = BcmExerciseResult::query()->whereKey($result->id)->where('project_id', $project->id)->where('bcm_exercise_id', $exercise->id)->lockForUpdate()->firstOrFail();
+            if ($exercise->status !== BcmExerciseStatus::Conducted) {
+                throw new ConflictHttpException('Nur durchgeführte, noch nicht abgeschlossene Übungen erlauben neue Feststellungsvorschläge.');
+            }
+            if ($result->outcome === null || $result->outcome === BcmExerciseOutcome::Passed || $result->finding_waived_at !== null || $result->finding_waived_by !== null || $result->finding_waiver_reason !== null) {
+                $this->reject('Nur Abweichungen ohne Verzicht erlauben einen Feststellungsvorschlag.');
+            }
+            $validated = $this->validateContent($data);
+            $active = $result->findings()->where('project_id', $project->id)->whereIn('status', [FindingStatus::Proposed->value, FindingStatus::Accepted->value])->lockForUpdate()->first();
+            if ($active) {
+                if ($active->title !== $validated['title'] || $active->description !== $validated['description'] || $active->severity->value !== $validated['severity']) {
+                    throw new ConflictHttpException('Für dieses Ergebnis besteht bereits eine abweichende offene Feststellung.');
+                }
+
+                return $active;
+            }
+            $finding = Finding::query()->create([...$validated, 'project_id' => $project->id, 'project_assessment_id' => null, 'assessment_question_id' => null, 'origin_type' => FindingOrigin::BcmExerciseResult, 'bcm_exercise_result_id' => $result->id, 'status' => FindingStatus::Proposed, 'proposed_by' => $actor->id, 'proposed_at' => now()]);
+            $this->audit->record('finding.proposed', $actor, ['project_id' => $project->id, 'finding_id' => $finding->id, 'source_type' => FindingOrigin::BcmExerciseResult->value, 'source_id' => $result->id, 'new_status' => FindingStatus::Proposed->value], $project->organization_id);
 
             return $finding;
         });

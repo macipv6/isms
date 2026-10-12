@@ -4,6 +4,7 @@ namespace App\Services\Bcm;
 
 use App\Enums\BcmRevisionStatus;
 use App\Models\Asset;
+use App\Models\BcmExercise;
 use App\Models\BiaRevision;
 use App\Models\BusinessProcess;
 use App\Models\ContinuityPlanRevision;
@@ -21,6 +22,32 @@ class BcmFreshness
         $resolved = [];
 
         return $this->check($revision, [], $resolved);
+    }
+
+    /** @return array{current: bool, reasons: list<string>} */
+    public function exercise(BcmExercise $exercise): array
+    {
+        $exercise = BcmExercise::query()->whereKey($exercise->id)->where('project_id', $exercise->project_id)->first();
+        if (! $exercise) {
+            return ['current' => false, 'reasons' => ['source_missing']];
+        }
+        $plan = ContinuityPlanRevision::query()->whereKey($exercise->continuity_plan_revision_id)->where('project_id', $exercise->project_id)->first();
+        if (! $plan) {
+            return ['current' => false, 'reasons' => ['source_missing']];
+        }
+        $reasons = $this->plan($plan)['reasons'];
+        if ($exercise->status->value !== 'draft' && (($exercise->source_snapshot['plan_revision_id'] ?? null) !== $plan->id || ($exercise->source_snapshot['plan_sources'] ?? null) != $plan->source_snapshot)) {
+            $reasons[] = 'source_snapshot_missing';
+        }
+        foreach ($exercise->evidenceLinks()->orderBy('evidence_id')->get() as $link) {
+            $proof = EvidenceFile::query()->whereKey($link->evidence_id)->where('project_id', $exercise->project_id)->first();
+            if (! $proof || $proof->status->value !== 'verified' || $proof->reviewed_by === null || $proof->reviewed_at === null) {
+                $reasons[] = 'evidence_unverified';
+            }
+        }
+        $reasons = array_values(array_unique($reasons));
+
+        return ['current' => $reasons === [], 'reasons' => $reasons];
     }
 
     /** @return array{current: bool, reasons: list<string>} */

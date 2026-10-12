@@ -5,13 +5,17 @@ namespace App\Services\Bcm;
 use App\Enums\DependencyNodeType;
 use App\Models\Asset;
 use App\Models\AssetRecoveryObjectiveRevision;
+use App\Models\BcmExercise;
 use App\Models\BiaConfigurationVersion;
 use App\Models\BiaImpact;
 use App\Models\BiaRevision;
 use App\Models\BusinessProcess;
 use App\Models\ContinuityPlanRevision;
 use App\Models\DependencyEdge;
+use App\Models\EvidenceFile;
 use App\Models\IsmsProject;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class BcmSourceSnapshot
 {
@@ -102,6 +106,101 @@ class BcmSourceSnapshot
         return ['project_id' => $revision->project_id, 'processes' => $processes, 'assets' => array_values($assets),
             'evidence_ids' => $revision->evidenceLinks()->orderBy('evidence_id')->pluck('evidence_id')->all(),
             'risk_analysis_ids' => $revision->riskLinks()->orderBy('risk_analysis_id')->pluck('risk_analysis_id')->all()];
+    }
+
+    /** Current relevant raw sources for an explicit exercise acknowledgement; never replaces pinned history.
+     * @return array<string, mixed>
+     */
+    public function exercise(BcmExercise $exercise): array
+    {
+        $plan = ContinuityPlanRevision::query()->whereKey($exercise->continuity_plan_revision_id)->where('project_id', $exercise->project_id)->firstOrFail();
+        try {
+            $current = $this->plan($plan);
+        } catch (ModelNotFoundException|NotFoundHttpException) {
+            $current = ['unavailable' => true, 'processes' => [], 'assets' => [], 'evidence_ids' => $plan->evidenceLinks()->orderBy('evidence_id')->pluck('evidence_id')->all()];
+        }
+        $queue = [];
+        $processIds = [];
+        $assetIds = [];
+        foreach ($plan->processes()->orderBy('business_process_id')->get() as $link) {
+            $processIds[$link->business_process_id] = true;
+            $head = BiaRevision::query()->where('project_id', $exercise->project_id)->where('status', 'approved')
+                ->whereHas('analysis', fn ($query) => $query->where('project_id', $exercise->project_id)->where('business_process_id', $link->business_process_id))
+                ->orderByDesc('version')->first();
+            if ($head) {
+                $queue[] = $head->id;
+            }
+        }
+        foreach ([$current, $plan->source_snapshot] as $snapshot) {
+            foreach ($snapshot['processes'] ?? [] as $process) {
+                $processIds[$process['process_id']] = true;
+                if ($process['revision_id'] !== null) {
+                    $queue[] = $process['revision_id'];
+                }
+            }
+            foreach ($snapshot['assets'] ?? [] as $asset) {
+                $assetIds[$asset['asset_id']] = true;
+            }
+        }
+        $visited = [];
+        $bias = [];
+        while ($queue !== []) {
+            $id = array_pop($queue);
+            if (isset($visited[$id])) {
+                continue;
+            }
+            $visited[$id] = true;
+            $bia = BiaRevision::query()->whereKey($id)->where('project_id', $exercise->project_id)->first();
+            try {
+                $bias[$id] = $bia ? $this->bia($bia) : null;
+            } catch (ModelNotFoundException|NotFoundHttpException) {
+                $bias[$id] = null;
+            }
+            if (! $bia) {
+                continue;
+            }
+            $processIds[$bia->analysis->business_process_id] = true;
+            // Include formerly selected targets as well, so deactivation cannot disappear from provenance.
+            foreach ([$bias[$id] ?? [], $bia->source_snapshot['sources'] ?? []] as $sources) {
+                foreach ($sources['dependencies'] ?? [] as $dependency) {
+                    if ($dependency['target_type'] === 'asset') {
+                        $assetIds[$dependency['target_id']] = true;
+                    } else {
+                        $processIds[$dependency['target_id']] = true;
+                        if (($dependency['objective']['id'] ?? null) !== null) {
+                            $queue[] = $dependency['objective']['id'];
+                        }
+                        $targetHead = BiaRevision::query()->where('project_id', $exercise->project_id)->where('status', 'approved')
+                            ->whereHas('analysis', fn ($query) => $query->where('project_id', $exercise->project_id)->where('business_process_id', $dependency['target_id']))
+                            ->orderByDesc('version')->first();
+                        if ($targetHead) {
+                            $queue[] = $targetHead->id;
+                        }
+                    }
+                }
+            }
+        }
+        ksort($bias);
+        ksort($processIds);
+        ksort($assetIds);
+        $active = [];
+        foreach (['process' => [BusinessProcess::class, array_keys($processIds)], 'asset' => [Asset::class, array_keys($assetIds)]] as $type => [$model, $ids]) {
+            foreach ($ids as $id) {
+                $target = $model::query()->whereKey($id)->where('project_id', $exercise->project_id)->first();
+                $active[] = ['type' => $type, 'id' => $id, 'is_active' => $target?->is_active];
+            }
+        }
+        $evidenceIds = array_values(array_unique([...$current['evidence_ids'], ...$exercise->evidenceLinks()->pluck('evidence_id')->all()]));
+        sort($evidenceIds);
+        $evidence = [];
+        foreach ($evidenceIds as $id) {
+            $proof = EvidenceFile::query()->whereKey($id)->where('project_id', $exercise->project_id)->first();
+            $evidence[] = ['id' => $id, 'status' => $proof?->status->value, 'reviewed_by' => $proof?->reviewed_by, 'reviewed_at' => $proof?->getRawOriginal('reviewed_at')];
+        }
+        $head = ContinuityPlanRevision::query()->where('project_id', $exercise->project_id)->where('continuity_plan_id', $plan->continuity_plan_id)->where('status', 'approved')->orderByDesc('version')->first();
+        $configuration = $this->configuration->current($plan->project);
+
+        return ['plan_revision_id' => $plan->id, 'approved_head_id' => $head?->id, 'configuration' => ['id' => $configuration?->id, 'version' => $configuration?->version, 'minutes' => $configuration?->minutes], 'plan_sources' => $current, 'bia_sources' => $bias, 'active_targets' => $active, 'evidence' => $evidence];
     }
 
     /** @return array<string, mixed> */
