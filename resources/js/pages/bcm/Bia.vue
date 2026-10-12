@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
-import AppLayout from '@/layouts/AppLayout.vue';
+import BiaIndex from './bia/Index.vue';
+import BiaShow from './bia/Show.vue';
+import type { BiaPage } from '@/types/bcm';
+defineProps<BiaPage>();
 </script>
 
 <template>
-    <Head title="Business Impact Analysis" />
-    <AppLayout>
-        <main class="mx-auto max-w-7xl px-6 py-8">
-            <h1 class="text-2xl font-semibold">Business Impact Analysis</h1>
-        </main>
-    </AppLayout>
+    <BiaShow
+        v-if="revision"
+        :key="revision.id"
+        v-bind="$props"
+        :revision="revision"
+    />
+    <BiaIndex v-else v-bind="$props" />
 </template>

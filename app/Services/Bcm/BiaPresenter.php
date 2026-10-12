@@ -52,7 +52,7 @@ class BiaPresenter
             $sourceRows = $this->dependencyRows($revision, $raw['dependencies'] ?? []);
             $props['sources'] = $this->workspace->items($request, $sourceRows, 'sources_page');
             $accepted = BcmConflictAcceptance::query()->where('project_id', $project->id)->where('bia_revision_id', $revision->id)->pluck('id', 'fingerprint')->all();
-            $rows = array_map(fn ($warning): array => ['code' => $warning->code, 'target_type' => $warning->targetType->value, 'target_id' => $warning->targetId, 'revision_id' => $warning->revisionId, 'blocking' => $warning->blocking, 'fingerprint' => $warning->fingerprint, 'accepted' => isset($accepted[$warning->fingerprint]), 'acceptance_id' => $accepted[$warning->fingerprint] ?? null], $this->checker->warnings($revision));
+            $rows = array_map(fn ($warning): array => ['code' => $warning->code, 'target_type' => $warning->targetType->value, 'target_id' => $warning->targetId, 'target_name' => $this->targetName($revision, $warning->targetType->value, $warning->targetId), 'revision_id' => $warning->revisionId, 'path_edge_ids' => $warning->pathEdgeIds, 'blocking' => $warning->blocking, 'fingerprint' => $warning->fingerprint, 'accepted' => isset($accepted[$warning->fingerprint]), 'acceptance_id' => $accepted[$warning->fingerprint] ?? null], $this->checker->warnings($revision));
             $props['conflicts'] = $this->workspace->items($request, $rows, 'conflicts_page');
         } catch (ModelNotFoundException|NotFoundHttpException) {
             // Inactive historical roots are readable without manufacturing new sources.
@@ -86,6 +86,13 @@ class BiaPresenter
         return [...$revision->only(['id', 'version', 'status', 'lock_version']), 'freshness' => $this->freshness->bia($revision)];
     }
 
+    private function targetName(BiaRevision $revision, string $type, string $id): ?string
+    {
+        $class = $type === 'process' ? BusinessProcess::class : Asset::class;
+
+        return $class::query()->where('project_id', $revision->project_id)->whereKey($id)->value('name');
+    }
+
     /** Historical JSON is projected only through scoped server-owned identities.
      * @param  list<array<string, mixed>>  $dependencies
      * @return list<array<string, mixed>>
@@ -114,7 +121,7 @@ class BiaPresenter
                     continue;
                 }
             }
-            $rows[] = ['target_type' => $type, 'target_id' => $source['target_id'], 'revision_id' => $objective?->id, 'version' => $objective?->version, 'critical' => (bool) $source['critical']];
+            $rows[] = ['target_type' => $type, 'target_id' => $source['target_id'], 'target_name' => $this->targetName($revision, $type, $source['target_id']), 'revision_id' => $objective?->id, 'version' => $objective?->version, 'critical' => (bool) $source['critical']];
         }
 
         return $rows;

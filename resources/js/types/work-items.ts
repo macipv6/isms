@@ -1,4 +1,8 @@
 export type ProjectWorkTab =
+    | 'bcm'
+    | 'bia'
+    | 'plans'
+    | 'exercises'
     | 'assessment'
     | 'evidence'
     | 'findings'

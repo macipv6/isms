@@ -123,4 +123,20 @@ class BcmPageContractTest extends TestCase
 
         $this->get($base.'?history_page=3&storage_path=other-poison')->assertOk()->assertInertia(fn (Assert $page) => $page->url($base.'?history_page=3'));
     }
+
+    public function test_bia_warning_exposes_only_its_server_scoped_critical_path_ids(): void
+    {
+        [$project, $actor] = $this->bcmProject();
+        app(BiaConfigurationWorkflow::class)->initialize($project, $actor);
+        $process = BusinessProcess::factory()->create(['project_id' => $project->id]);
+        $asset = Asset::factory()->create(['project_id' => $project->id]);
+        $edge = DependencyEdge::factory()->create(['project_id' => $project->id, 'source_process_id' => $process->id, 'source_asset_id' => null, 'target_process_id' => null, 'target_asset_id' => $asset->id, 'importance' => 'critical']);
+        $foreign = DependencyEdge::factory()->create();
+        $bia = app(BiaWorkflow::class)->draft($process, $actor);
+        $count = DB::table('audit_events')->count();
+        $response = $this->actingAs($actor)->get("/projects/{$project->id}/bcm/bia/{$bia->id}");
+        $response->assertOk()->assertInertia(fn (Assert $page) => $page->where('conflicts.data.0.code', 'dependency_target_unknown')->where('conflicts.data.0.blocking', true)->where('conflicts.data.0.target_id', $asset->id)->where('conflicts.data.0.target_name', $asset->name)->where('conflicts.data.0.path_edge_ids', [$edge->id])->where('sources.data.0.target_name', $asset->name)->missing('revision.source_snapshot'));
+        $this->assertStringNotContainsString($foreign->id, $response->getContent());
+        $this->assertSame($count, DB::table('audit_events')->count());
+    }
 }
