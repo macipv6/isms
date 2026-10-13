@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
-import AppLayout from '@/layouts/AppLayout.vue';
+import Index from './plans/Index.vue';
+import Show from './plans/Show.vue';
+import type { PlanPage } from '@/types/bcm';
+defineProps<PlanPage>();
 </script>
 
 <template>
-    <Head title="Notfallpläne" />
-    <AppLayout>
-        <main class="mx-auto max-w-7xl px-6 py-8">
-            <h1 class="text-2xl font-semibold">Notfallpläne</h1>
-        </main>
-    </AppLayout>
+    <Show v-if="revision" v-bind="$props" :revision="revision" /><Index
+        v-else
+        v-bind="$props"
+    />
 </template>

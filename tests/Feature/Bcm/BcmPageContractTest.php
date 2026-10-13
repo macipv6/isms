@@ -2,16 +2,24 @@
 
 namespace Tests\Feature\Bcm;
 
+use App\Enums\FindingStatus;
 use App\Models\Asset;
 use App\Models\BusinessProcess;
 use App\Models\DependencyEdge;
 use App\Models\EvidenceFile;
+use App\Models\RiskAnalysis;
+use App\Models\RiskMethodologyVersion;
+use App\Models\ThreatCatalogVersion;
 use App\Services\Bcm\AssetRecoveryWorkflow;
 use App\Services\Bcm\BcmExerciseWorkflow;
 use App\Services\Bcm\BiaConfigurationWorkflow;
 use App\Services\Bcm\BiaWorkflow;
 use App\Services\Bcm\ContinuityPlanWorkflow;
 use App\Services\Findings\FindingWorkflow;
+use App\Services\Measures\MeasureWorkflow;
+use App\Services\Threats\ProjectRiskContextService;
+use Database\Seeders\RiskMethodologySeeder;
+use Database\Seeders\ThreatCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -20,6 +28,51 @@ use Tests\TestCase;
 class BcmPageContractTest extends TestCase
 {
     use InteractsWithBcm, RefreshDatabase;
+
+    public function test_plan_exercise_picker_props_are_scoped_bounded_and_read_only(): void
+    {
+        [$project, $actor] = $this->bcmProject();
+        $plan = $this->approvedPlan($project, $actor);
+        BusinessProcess::factory()->count(26)->create(['project_id' => $project->id]);
+        $inactive = BusinessProcess::factory()->create(['project_id' => $project->id, 'is_active' => false]);
+        $foreign = BusinessProcess::factory()->create(['name' => 'Foreign picker secret']);
+        $this->seed([RiskMethodologySeeder::class, ThreatCatalogSeeder::class]);
+        $context = app(ProjectRiskContextService::class)->initialize($project, RiskMethodologyVersion::query()->sole(), ThreatCatalogVersion::query()->sole(), $actor);
+        RiskAnalysis::factory()->count(26)->create(['project_id' => $project->id, 'business_process_id' => $plan->processes()->sole()->business_process_id, 'project_threat_id' => $context->projectThreats()->firstOrFail()->id]);
+        $foreignContext = app(ProjectRiskContextService::class)->initialize($foreign->project, RiskMethodologyVersion::query()->sole(), ThreatCatalogVersion::query()->sole(), $actor);
+        $foreignRisk = RiskAnalysis::factory()->create(['project_id' => $foreign->project_id, 'business_process_id' => $foreign->id, 'project_threat_id' => $foreignContext->projectThreats()->firstOrFail()->id]);
+        $foreignPlan = $this->approvedPlan(...$this->bcmProject());
+        $count = DB::table('audit_events')->count();
+        $base = "/projects/{$project->id}/bcm";
+        $response = $this->actingAs($actor)->get($base.'/plans?process_options_page=2&risk_options_page=2&private=poison');
+        $response->assertOk()->assertInertia(fn (Assert $page) => $page->has('process_options.data', 2)->where('process_options.total', 27)->where('process_options.per_page', 25)->where('risk_options.total', 26)->has('risk_options.data', 1)->where('risk_options.per_page', 25)->url($base.'/plans?process_options_page=2&risk_options_page=2'));
+        foreach ([$inactive->id, $foreign->id, $foreignRisk->id, 'poison'] as $secret) {
+            $this->assertStringNotContainsString($secret, $response->getContent());
+        }
+        $this->get($base.'/plans/'.$plan->id)->assertInertia(fn (Assert $page) => $page->where('sources.data.0.target_name', $plan->processes()->sole()->process->name)->where('sources.data.0.revision_id', $plan->processes()->sole()->bia_revision_id)->has('linked_processes', 1));
+        $response = $this->get($base.'/exercises?plan_options_page=1');
+        $response->assertOk()->assertInertia(fn (Assert $page) => $page->has('plan_options.data', 1)->where('plan_options.data.0.id', $plan->id)->where('plan_options.data.0.status', 'approved')->where('plan_options.data.0.freshness.current', true)->where('plan_options.per_page', 25));
+        $this->assertStringNotContainsString($foreignPlan->id, $response->getContent());
+        $this->assertSame($count, DB::table('audit_events')->count());
+    }
+
+    public function test_unrecorded_criteria_exclude_stored_results_and_foreign_exercises(): void
+    {
+        [$project, $actor] = $this->bcmProject();
+        $plan = $this->approvedPlan($project, $actor);
+        $workflow = app(BcmExerciseWorkflow::class);
+        $exercise = $workflow->create($plan, ['scenario' => 'Outage', 'exercise_type' => 'tabletop', 'planned_at' => '2026-11-01', 'leader_name' => 'Lead', 'participants' => 'Team', 'criteria' => array_fill(0, 27, ['expected_result' => 'Restore'])], $actor);
+        $other = $workflow->create($plan, ['criteria' => [['expected_result' => 'Foreign criterion']]], $actor);
+        $exercise = $workflow->plan($exercise, 1, $actor);
+        $stored = $exercise->criteria()->orderBy('position')->firstOrFail();
+        $exercise = $workflow->record($exercise, ['results' => [['criterion_id' => $stored->id, 'outcome' => 'passed']]], 2, $actor);
+        $count = DB::table('audit_events')->count();
+        $base = "/projects/{$project->id}/bcm/exercises/{$exercise->id}";
+        $response = $this->actingAs($actor)->get($base.'?unrecorded_criteria_page=2&unsafe=poison');
+        $response->assertOk()->assertInertia(fn (Assert $page) => $page->has('unrecorded_criteria.data', 1)->where('unrecorded_criteria.total', 26)->where('unrecorded_criteria.per_page', 25)->where('unrecorded_criteria.data.0.position', 27)->where('results.data.0.criterion_id', $stored->id)->url($base.'?unrecorded_criteria_page=2'));
+        $this->assertStringNotContainsString($other->criteria()->sole()->id, $response->getContent());
+        $this->assertSame($count, DB::table('audit_events')->count());
+    }
 
     public function test_index_props_are_scoped_paginated_and_exclude_private_metadata_and_query_poison(): void
     {
@@ -62,13 +115,22 @@ class BcmPageContractTest extends TestCase
         $w = app(BcmExerciseWorkflow::class);
         $exercise = $w->create($plan, ['scenario' => 'Outage', 'exercise_type' => 'tabletop', 'planned_at' => '2026-11-01', 'leader_name' => 'Lead', 'participants' => 'Team', 'criteria' => [['expected_result' => 'Restore']]], $actor);
         $exercise = $w->plan($exercise, 1, $actor);
-        $exercise = $w->record($exercise, ['results' => [['criterion_id' => $exercise->criteria()->sole()->id, 'outcome' => 'failed', 'observations' => 'Too slow']]], 2, $actor);
+        $exercise = $w->record($exercise, ['actual_at' => '2026-11-01', 'results' => [['criterion_id' => $exercise->criteria()->sole()->id, 'outcome' => 'failed', 'observations' => 'Too slow', 'reason' => 'Delay']]], 2, $actor);
         $result = $exercise->results()->sole();
         $finding = app(FindingWorkflow::class)->proposeFromExercise($result, ['title' => 'Correction', 'description' => 'Restore faster', 'severity' => 'high'], $actor);
+        $exercise = $w->complete($exercise, $exercise->lock_version, $actor);
         $base = "/projects/{$project->id}/bcm";
         $count = DB::table('audit_events')->count();
         $this->actingAs($actor)->get($base.'/plans/'.$plan->id)->assertOk()->assertInertia(fn (Assert $page) => $page->component('bcm/Plans', false)->where('revision.id', $plan->id)->where('revision.freshness.current', true)->has('revision.steps', 1)->has('revision.roles', 1)->has('sources.data', 1)->missing('revision.source_snapshot')->where('capabilities.edit', false));
-        $this->get($base.'/exercises/'.$exercise->id)->assertOk()->assertInertia(fn (Assert $page) => $page->component('bcm/Exercises', false)->where('exercise.id', $exercise->id)->where('exercise.plan_revision_id', $plan->id)->where('results.data.0.id', $result->id)->where('results.data.0.capabilities.edit', false)->where('results.data.0.capabilities.propose_finding', true)->where('results.data.0.capabilities.waive_finding', false)->where('results.data.0.findings.data.0.id', $finding->id)->where('results.per_page', 25)->missing('exercise.source_snapshot'));
+        $this->get($base.'/exercises/'.$exercise->id)->assertOk()->assertInertia(fn (Assert $page) => $page->component('bcm/Exercises', false)->where('exercise.id', $exercise->id)->where('exercise.status', 'completed')->where('exercise.plan_revision_id', $plan->id)->where('results.data.0.id', $result->id)->where('results.data.0.capabilities.edit', false)->where('results.data.0.capabilities.propose_finding', false)->where('results.data.0.capabilities.waive_finding', false)->where('results.data.0.findings.data.0.id', $finding->id)->where('results.data.0.findings.data.0.capabilities.can_decide', true)->where('results.data.0.findings.data.0.capabilities.can_create_measure', false)->where('results.per_page', 25)->missing('exercise.source_snapshot'));
+        $project->organization->update(['is_active' => false]);
+        $this->get($base.'/exercises/'.$exercise->id)->assertInertia(fn (Assert $page) => $page->where('capabilities.write', false)->where('results.data.0.findings.data.0.capabilities.can_decide', false));
+        $project->organization->update(['is_active' => true]);
+        $this->assertSame($count, DB::table('audit_events')->count());
+        $finding = app(FindingWorkflow::class)->decide($finding, FindingStatus::Accepted, null, $actor);
+        $measure = app(MeasureWorkflow::class)->create($finding, ['title' => 'Restore sooner', 'description' => 'Improve recovery', 'priority' => 'high', 'responsible_name' => 'Operator', 'due_date' => '2026-12-01'], $actor);
+        $count = DB::table('audit_events')->count();
+        $this->get($base.'/exercises/'.$exercise->id)->assertInertia(fn (Assert $page) => $page->where('results.data.0.findings.data.0.capabilities.can_decide', false)->where('results.data.0.findings.data.0.capabilities.can_create_measure', true)->where('results.data.0.findings.data.0.capabilities.can_close', false)->where('results.data.0.findings.data.0.measures.data.0.id', $measure->id)->where('results.data.0.findings.data.0.measures.data.0.can_transition', true)->where('results.data.0.findings.data.0.measures.per_page', 25));
         $this->assertSame($count, DB::table('audit_events')->count());
         $revision = app(ContinuityPlanWorkflow::class)->revise($plan, $actor);
         $this->get($base.'/plans/'.$revision->id)->assertInertia(fn (Assert $page) => $page->where('capabilities.edit', true)->where('history.data.1.id', $plan->id));

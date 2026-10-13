@@ -167,8 +167,8 @@ function formatDate(value: string): string {
                 Keine Feststellungen für diesen Filter vorhanden.
             </p>
             <p class="mt-2 text-sm text-slate-400">
-                Feststellungen werden aus einer teilweise oder nicht erfüllten
-                Frage vorgeschlagen.
+                Feststellungen können aus Bewertungsfragen oder
+                Übungsergebnissen vorgeschlagen werden.
             </p>
         </div>
     </AppLayout>

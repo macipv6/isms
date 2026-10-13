@@ -2,10 +2,14 @@
 
 namespace App\Services\Bcm;
 
+use App\Models\Asset;
 use App\Models\AssetRecoveryObjectiveRevision;
 use App\Models\BiaRevision;
+use App\Models\BusinessProcess;
 use App\Models\ContinuityPlanRevision;
 use App\Models\IsmsProject;
+use App\Models\ProjectThreat;
+use App\Models\RiskAnalysis;
 use Illuminate\Http\Request;
 
 class ContinuityPlanPresenter
@@ -18,6 +22,7 @@ class ContinuityPlanPresenter
         $props = $this->workspace->base($request, $project);
         $props['revision'] = null;
         $props['entries'] = $this->workspace->paginate($request, ContinuityPlanRevision::query()->where('project_id', $project->id)->orderByDesc('created_at')->orderBy('id'), $this->summary(...));
+        $props = [...$props, ...$this->options($request, $project)];
 
         return $props;
     }
@@ -39,6 +44,9 @@ class ContinuityPlanPresenter
         $props['history'] = $this->workspace->history($request, ContinuityPlanRevision::query()->where('project_id', $project->id)->where('continuity_plan_id', $revision->continuity_plan_id));
         $props['lock_version'] = $revision->lock_version;
         $props['sources'] = $this->workspace->items($request, $this->sourceRows($revision), 'sources_page');
+        $props = [...$props, ...$this->options($request, $project)];
+        $props['linked_processes'] = BusinessProcess::query()->where('project_id', $project->id)->whereIn('id', $props['revision']['process_ids'])->orderBy('name')->get()->map(fn (BusinessProcess $process): array => $process->only(['id', 'name', 'is_active']))->all();
+        $props['linked_risks'] = RiskAnalysis::query()->where('project_id', $project->id)->whereIn('id', $props['revision']['risk_analysis_ids'])->orderBy('id')->get()->map($this->riskOption(...))->all();
 
         return $props;
     }
@@ -70,7 +78,30 @@ class ContinuityPlanPresenter
             }
         }
 
+        foreach ($rows as &$row) {
+            $class = $row['target_type'] === 'process' ? BusinessProcess::class : Asset::class;
+            $row['target_name'] = $class::query()->where('project_id', $revision->project_id)->whereKey($row['target_id'])->value('name');
+        }
+
         return $rows;
+    }
+
+    /** @return array<string, mixed> */
+    private function options(Request $request, IsmsProject $project): array
+    {
+        return [
+            'process_options' => $this->workspace->paginate($request, BusinessProcess::query()->where('project_id', $project->id)->where('is_active', true)->orderBy('name')->orderBy('id'), fn (BusinessProcess $process): array => $process->only(['id', 'name', 'is_active']), 'process_options_page'),
+            'risk_options' => $this->workspace->paginate($request, RiskAnalysis::query()->where('project_id', $project->id)->orderBy('id'), $this->riskOption(...), 'risk_options_page'),
+        ];
+    }
+
+    /** @return array{id: string, title: string} */
+    private function riskOption(RiskAnalysis $analysis): array
+    {
+        $title = $analysis->cycles()->where('project_id', $analysis->project_id)->orderByDesc('cycle_number')->value('title');
+        $title ??= ProjectThreat::query()->where('project_id', $analysis->project_id)->whereKey($analysis->project_threat_id)->value('title');
+
+        return ['id' => $analysis->id, 'title' => $title ?? $analysis->scenario_identity];
     }
 
     /** @return array<string, mixed> */

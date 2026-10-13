@@ -23,6 +23,10 @@ export interface BcmCapabilities {
     approve?: boolean;
     revise?: boolean;
     draft?: boolean;
+    plan?: boolean;
+    record?: boolean;
+    complete?: boolean;
+    cancel?: boolean;
 }
 export interface BcmConfiguration {
     id: string;
@@ -82,7 +86,147 @@ export interface BcmSource {
     target_id: string;
     revision_id: string | null;
     version: number | null;
-    critical: boolean;
+    critical?: boolean;
+    freshness?: BcmFreshness;
+}
+export interface BcmStep {
+    instruction: string | null;
+    owner_name: string | null;
+    expected_minutes: number | string | null;
+}
+export interface BcmRole {
+    role: string | null;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+    deputy_name: string | null;
+}
+export interface PlanHead extends Pick<
+    BcmHistory,
+    'id' | 'version' | 'status'
+> {
+    continuity_plan_id: string;
+    lock_version: number;
+    title: string | null;
+    freshness: BcmFreshness;
+}
+export interface PlanRevision extends PlanHead {
+    approved_at: string | null;
+    scenario: string | null;
+    activation_conditions: string | null;
+    strategy: string | null;
+    minimum_operation: string | null;
+    normal_operation_return: string | null;
+    steps: BcmStep[];
+    roles: BcmRole[];
+    process_ids: string[];
+    evidence_ids: string[];
+    risk_analysis_ids: string[];
+    lists_complete: boolean;
+}
+export type PlanOption = Pick<
+    PlanHead,
+    'id' | 'title' | 'version' | 'status' | 'freshness'
+>;
+export interface BcmRiskOption {
+    id: string;
+    title: string;
+}
+export interface PlanPage extends BcmPage {
+    revision: PlanRevision | null;
+    entries: BcmPagination<PlanHead>;
+    process_options: BcmPagination<BcmTarget>;
+    risk_options: BcmPagination<BcmRiskOption>;
+    linked_processes?: BcmTarget[];
+    linked_risks?: BcmRiskOption[];
+}
+export type ExerciseStatus =
+    | 'draft'
+    | 'planned'
+    | 'conducted'
+    | 'completed'
+    | 'cancelled';
+export type ExerciseOutcome = 'passed' | 'partial' | 'failed' | 'not_tested';
+export interface ExerciseCriterion {
+    id: string;
+    position: number;
+    expected_result: string | null;
+    expected_minutes: number | string | null;
+}
+export interface ExerciseHead {
+    id: string;
+    status: ExerciseStatus;
+    lock_version: number;
+    scenario: string | null;
+    planned_at: string | null;
+    plan_revision_id: string;
+    freshness: BcmFreshness;
+}
+export interface Exercise extends ExerciseHead {
+    exercise_type: 'tabletop' | 'recovery_test' | null;
+    leader_name: string | null;
+    participants: string | null;
+    actual_at: string | null;
+    completed_by: string | null;
+    completed_at: string | null;
+    cancelled_by: string | null;
+    cancelled_at: string | null;
+    cancelled_reason: string | null;
+    source_change_reason: string | null;
+    source_change_acknowledged_by: string | null;
+    source_change_acknowledged_at: string | null;
+    criteria: ExerciseCriterion[];
+    evidence_ids: string[];
+    lists_complete: boolean;
+}
+export interface BcmFinding {
+    id: string;
+    title: string;
+    severity: string;
+    status: string;
+    capabilities: {
+        can_decide: boolean;
+        can_close: boolean;
+        can_create_measure: boolean;
+    };
+    measures: BcmPagination<{
+        id: string;
+        title: string;
+        status: string;
+        can_transition: boolean;
+    }>;
+}
+export interface ExerciseResult {
+    id: string;
+    criterion_id: string;
+    outcome: ExerciseOutcome | null;
+    observations: string | null;
+    reason: string | null;
+    actual_minutes: number | string | null;
+    finding_waiver_reason: string | null;
+    finding_waived_by: string | null;
+    finding_waived_at: string | null;
+    capabilities: {
+        edit: boolean;
+        propose_finding: boolean;
+        waive_finding: boolean;
+    };
+    findings: BcmPagination<BcmFinding>;
+}
+export interface ExerciseHistory {
+    id: string;
+    status: ExerciseStatus;
+    planned_at: string | null;
+    completed_at: string | null;
+    cancelled_at: string | null;
+}
+export interface ExercisePage extends Omit<BcmPage, 'history'> {
+    exercise: Exercise | null;
+    entries: BcmPagination<ExerciseHead>;
+    plan_options?: BcmPagination<PlanOption>;
+    results?: BcmPagination<ExerciseResult>;
+    unrecorded_criteria?: BcmPagination<ExerciseCriterion>;
+    history: BcmPagination<ExerciseHistory | BcmHistory>;
 }
 export interface BcmConflict {
     target_name: string | null;

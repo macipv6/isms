@@ -29,7 +29,7 @@ class BcmWorkspacePresenter
     public function render(Request $request, string $component, array $props): Response
     {
         $allowed = [];
-        foreach (['page', 'history_page', 'sources_page', 'conflicts_page', 'results_page', 'assets_page', 'findings_page', 'measures_page'] as $key) {
+        foreach (['page', 'history_page', 'sources_page', 'conflicts_page', 'results_page', 'assets_page', 'findings_page', 'measures_page', 'process_options_page', 'risk_options_page', 'plan_options_page', 'unrecorded_criteria_page'] as $key) {
             if ($request->query($key) !== null) {
                 $allowed[$key] = $this->pageNumber($request, $key);
             }

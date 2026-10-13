@@ -2,12 +2,16 @@
 
 namespace App\Services\Bcm;
 
+use App\Enums\FindingStatus;
 use App\Models\BcmExercise;
 use App\Models\BcmExerciseCriterion;
 use App\Models\BcmExerciseResult;
+use App\Models\ContinuityPlanRevision;
 use App\Models\Finding;
 use App\Models\IsmsProject;
+use App\Models\Measure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 class BcmExercisePresenter
 {
@@ -19,6 +23,7 @@ class BcmExercisePresenter
         $props = $this->workspace->base($request, $project);
         $props['exercise'] = null;
         $props['entries'] = $this->workspace->paginate($request, BcmExercise::query()->where('project_id', $project->id)->orderByDesc('created_at')->orderBy('id'), $this->summary(...));
+        $props['plan_options'] = $this->workspace->paginate($request, ContinuityPlanRevision::query()->where('project_id', $project->id)->where('status', 'approved')->orderByDesc('created_at')->orderBy('id'), fn (ContinuityPlanRevision $plan): array => [...$plan->only(['id', 'title', 'version', 'status']), 'freshness' => $this->freshness->plan($plan)], 'plan_options_page');
 
         return $props;
     }
@@ -46,9 +51,14 @@ class BcmExercisePresenter
             return [...$result->only(['id', 'outcome', 'observations', 'reason', 'actual_minutes', 'finding_waiver_reason', 'finding_waived_by', 'finding_waived_at']),
                 'criterion_id' => $result->bcm_exercise_criterion_id,
                 'capabilities' => ['edit' => $conducted && ! $hasHistory, 'propose_finding' => $conducted && $nonpassed && $result->finding_waived_at === null, 'waive_finding' => $conducted && $nonpassed && ! $hasHistory],
-                'findings' => $this->workspace->paginate($request, $history->orderByDesc('created_at')->orderBy('id'), fn (Finding $finding): array => [...$finding->only(['id', 'title', 'severity', 'status']), 'measures' => $this->workspace->paginate($request, $finding->measures()->getQuery()->orderBy('id'), fn ($measure): array => $measure->only(['id', 'title', 'status']), 'measures_page')], 'findings_page'),
+                'findings' => $this->workspace->paginate($request, $history->orderByDesc('created_at')->orderBy('id'), fn (Finding $finding): array => [...$finding->only(['id', 'title', 'severity', 'status']), 'capabilities' => [
+                    'can_decide' => $finding->status === FindingStatus::Proposed && Gate::forUser($request->user())->allows('decide', $finding),
+                    'can_create_measure' => $finding->status === FindingStatus::Accepted && Gate::forUser($request->user())->allows('create', [Measure::class, $finding]),
+                    'can_close' => $finding->status === FindingStatus::Accepted && $finding->measures()->exists() && ! $finding->measures()->whereNotIn('status', ['completed', 'cancelled'])->exists() && Gate::forUser($request->user())->allows('close', $finding),
+                ], 'measures' => $this->workspace->paginate($request, $finding->measures()->where('project_id', $finding->project_id)->orderBy('id')->getQuery(), fn (Measure $measure): array => [...$measure->only(['id', 'title', 'status']), 'can_transition' => Gate::forUser($request->user())->allows('transition', $measure)], 'measures_page')], 'findings_page'),
             ];
         }, 'results_page');
+        $props['unrecorded_criteria'] = $this->workspace->paginate($request, BcmExerciseCriterion::query()->where('project_id', $project->id)->where('bcm_exercise_id', $exercise->id)->whereNotExists(fn ($query) => $query->selectRaw('1')->from('bcm_exercise_results')->whereColumn('bcm_exercise_criterion_id', 'bcm_exercise_criteria.id')->where('project_id', $project->id)->where('bcm_exercise_id', $exercise->id))->orderBy('position'), fn (BcmExerciseCriterion $criterion): array => $criterion->only(['id', 'position', 'expected_result', 'expected_minutes']), 'unrecorded_criteria_page');
         $props['sources'] = $this->workspace->items($request, $this->plans->sourceRows($exercise->planRevision), 'sources_page');
         $props['history'] = $this->workspace->paginate($request, BcmExercise::query()->where('project_id', $project->id)->where('continuity_plan_revision_id', $exercise->continuity_plan_revision_id)->orderByDesc('created_at')->orderBy('id'), fn (BcmExercise $row): array => $row->only(['id', 'status', 'planned_at', 'completed_at', 'cancelled_at']), 'history_page');
         $props['lock_version'] = $exercise->lock_version;
