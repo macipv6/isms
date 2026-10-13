@@ -5,7 +5,8 @@ import { dirname, resolve } from 'node:path';
 import vm from 'node:vm';
 import { compileScript, parse } from '@vue/compiler-sfc';
 import * as inertia from '@inertiajs/vue3';
-import { nextTick, reactive } from 'vue';
+import { renderToString } from '@vue/server-renderer';
+import { createSSRApp, nextTick, reactive } from 'vue';
 import ts from 'typescript';
 const require = createRequire(import.meta.url);
 const root = resolve('resources/js');
@@ -27,6 +28,7 @@ function load(filename) {
         {
             module,
             exports: module.exports,
+            fetch: (...args) => globalThis.fetch(...args),
             require: (id) => {
                 if (id === '@inertiajs/vue3') return inertia;
                 if (id.endsWith('.vue')) return {};
@@ -48,6 +50,96 @@ function setup(name, props) {
         `${name} provides the real workspace form`,
     );
     return component.default.setup(props, { expose() {}, emit() {} });
+}
+async function setupPicker(version) {
+    const component = load(
+        resolve(root, 'components/bcm/BcmEvidencePicker.vue'),
+    ).default;
+    let picker;
+    const initialComponent = {
+        ...component,
+        setup(props, context) {
+            picker = component.setup(props, context);
+            return () => null;
+        },
+    };
+    await renderToString(
+        createSSRApp(inertia.App, {
+            initialComponent,
+            initialPage: {
+                component: 'bcm/Plans',
+                url: '/projects/project/bcm/plans',
+                version,
+                props: {
+                    base: '/organizations/org/projects/project',
+                    modelValue: [],
+                },
+                clearHistory: false,
+                encryptHistory: false,
+            },
+        }),
+    );
+    return picker;
+}
+const originalFetch = globalThis.fetch;
+try {
+    let request;
+    let expectedVersion = 'production-manifest-version';
+    globalThis.fetch = async (url, options) => {
+        request = { url, ...options };
+        const ok = options.headers['X-Inertia-Version'] === expectedVersion;
+        return {
+            ok,
+            status: ok ? 200 : 409,
+            json: async () => ({
+                props: {
+                    resources: {
+                        evidence: [
+                            {
+                                id: 'project-evidence',
+                                label: 'Recovery protocol',
+                                status: 'verified',
+                            },
+                        ],
+                    },
+                    referencePages: { resource: { current: 2, last: 3 } },
+                },
+            }),
+        };
+    };
+    const picker = await setupPicker(expectedVersion);
+    await picker.load(2);
+    assert.equal(
+        request.headers['X-Inertia-Version'],
+        'production-manifest-version',
+        'Evidence picker sends the current Inertia version for production GET requests',
+    );
+    assert.equal(
+        request.url,
+        '/organizations/org/projects/project/risks?reference_page=2',
+    );
+    assert.equal(request.headers['X-Inertia'], 'true');
+    assert.equal(request.headers['X-Inertia-Partial-Component'], 'risks/Index');
+    assert.equal(
+        request.headers['X-Inertia-Partial-Data'],
+        'resources,referencePages',
+    );
+    assert.equal(request.credentials, 'same-origin');
+    assert.equal(picker.options.value[0].id, 'project-evidence');
+    assert.equal(picker.page.value, 2);
+    assert.equal(picker.last.value, 3);
+    assert.equal(picker.error.value, '');
+    expectedVersion = '';
+    const developmentPicker = await setupPicker(null);
+    await developmentPicker.load();
+    assert.equal(
+        request.headers['X-Inertia-Version'],
+        '',
+        'Null Inertia version uses the standard empty version header',
+    );
+    assert.equal(developmentPicker.error.value, '');
+} finally {
+    globalThis.fetch = originalFetch;
 }
 const page = {
     data: [],

@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { usePage } from '@inertiajs/vue3';
 import { ref } from 'vue';
 const ids = defineModel<string[]>({ required: true });
 const props = defineProps<{ base: string; readonly?: boolean }>();
+const inertiaPage = usePage();
 const options = ref<{ id: string; label: string; status: string }[]>([]);
 const page = ref(1);
 const last = ref(1);
@@ -17,6 +19,7 @@ async function load(number = 1): Promise<void> {
             {
                 headers: {
                     'X-Inertia': 'true',
+                    'X-Inertia-Version': inertiaPage.version ?? '',
                     'X-Inertia-Partial-Component': 'risks/Index',
                     'X-Inertia-Partial-Data': 'resources,referencePages',
                     Accept: 'application/json',
