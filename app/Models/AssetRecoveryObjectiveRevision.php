@@ -22,6 +22,9 @@ class AssetRecoveryObjectiveRevision extends Model
 {
     use HasUuids;
 
+    // Preserve absolute instants when PostgreSQL and application timezones differ.
+    protected $dateFormat = 'Y-m-d H:i:sP';
+
     protected $attributes = ['rpo_not_applicable' => false];
 
     protected $fillable = ['project_id', 'asset_id', 'version', 'lock_version', 'status', 'rto_minutes', 'rpo_minutes', 'rpo_not_applicable', 'rpo_reason', 'target_reason', 'source_snapshot', 'created_by', 'approved_by', 'approved_at'];

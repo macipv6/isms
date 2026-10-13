@@ -24,6 +24,9 @@ class BiaRevision extends Model
 {
     use HasUuids;
 
+    // Preserve absolute instants when PostgreSQL and application timezones differ.
+    protected $dateFormat = 'Y-m-d H:i:sP';
+
     protected $attributes = ['rpo_not_applicable' => false];
 
     protected $fillable = ['project_id', 'business_impact_analysis_id', 'bia_configuration_version_id', 'version', 'lock_version', 'status', 'owner_name', 'mtpd_minutes', 'rto_minutes', 'rpo_minutes', 'rpo_not_applicable', 'rpo_reason', 'target_reason', 'source_snapshot', 'created_by', 'approved_by', 'approved_at'];

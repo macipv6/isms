@@ -18,6 +18,9 @@ class ContinuityPlanRevision extends Model
 {
     use HasUuids;
 
+    // Preserve absolute instants when PostgreSQL and application timezones differ.
+    protected $dateFormat = 'Y-m-d H:i:sP';
+
     protected $fillable = ['project_id', 'continuity_plan_id', 'version', 'lock_version', 'status', 'title', 'scenario', 'activation_conditions', 'strategy', 'minimum_operation', 'normal_operation_return', 'source_snapshot', 'created_by', 'approved_by', 'approved_at'];
 
     protected function casts(): array

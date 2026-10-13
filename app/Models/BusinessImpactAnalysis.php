@@ -11,6 +11,9 @@ class BusinessImpactAnalysis extends Model
 {
     use HasUuids;
 
+    // Preserve absolute instants when PostgreSQL and application timezones differ.
+    protected $dateFormat = 'Y-m-d H:i:sP';
+
     protected $fillable = ['project_id', 'business_process_id'];
 
     protected function casts(): array

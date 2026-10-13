@@ -17,6 +17,9 @@ class BcmExercise extends Model
 {
     use HasUuids;
 
+    // Preserve absolute instants when PostgreSQL and application timezones differ.
+    protected $dateFormat = 'Y-m-d H:i:sP';
+
     protected $fillable = ['project_id', 'continuity_plan_revision_id', 'status', 'lock_version', 'scenario', 'exercise_type', 'planned_at', 'leader_name', 'participants', 'actual_at', 'source_snapshot', 'created_by', 'completed_by', 'completed_at', 'cancelled_by', 'cancelled_at', 'cancelled_reason', 'source_change_acknowledged_by', 'source_change_acknowledged_at', 'source_change_reason'];
 
     protected function casts(): array

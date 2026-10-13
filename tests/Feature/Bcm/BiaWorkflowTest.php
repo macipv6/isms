@@ -209,6 +209,28 @@ class BiaWorkflowTest extends TestCase
         return [['revision_update'], ['revision_delete'], ['impact_update'], ['impact_delete'], ['duplicate_draft']];
     }
 
+    public function test_database_rejects_impact_insert_into_approved_revision_before_other_constraints(): void
+    {
+        [$project, $actor] = $this->bcmProject();
+        $config = app(BiaConfigurationWorkflow::class)->initialize($project, $actor);
+        $workflow = app(BiaWorkflow::class);
+        $draft = $workflow->draft(BusinessProcess::factory()->create(['project_id' => $project->id]), $actor);
+        $approved = $workflow->approve($workflow->save($draft, $this->completeBiaData($config), 1, $actor), 2, $actor);
+        try {
+            DB::transaction(fn () => DB::table('bia_impacts')->insert([
+                'id' => (string) Str::uuid(), 'project_id' => $project->id, 'bia_revision_id' => $approved->id,
+                'area' => 'financial', 'minutes' => 120, 'level' => 2, 'reason' => 'Later addition',
+            ]));
+            $this->fail('Impact insertion changed approved history.');
+        } catch (QueryException $exception) {
+            // An unused slot prevents uniqueness masking; the exact guard must win over configuration validation.
+            $this->assertSame('P0001', $exception->errorInfo[0]);
+            $this->assertStringContainsString('Approved BIA impacts are immutable', $exception->getMessage());
+        }
+        $this->assertSame(24, $approved->impacts()->count());
+        $this->assertFalse($approved->impacts()->where('minutes', 120)->exists());
+    }
+
     #[DataProvider('foreignReferences')]
     public function test_database_rejects_foreign_project_references_and_identity_reassignment(string $target): void
     {
