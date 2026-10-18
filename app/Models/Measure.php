@@ -24,6 +24,9 @@ class Measure extends Model
 
     use HasUuids;
 
+    // Preserve absolute instants when PostgreSQL and application timezones differ.
+    protected $dateFormat = 'Y-m-d H:i:sP';
+
     protected $fillable = [
         'project_id',
         'finding_id',

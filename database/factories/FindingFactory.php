@@ -5,6 +5,7 @@ namespace Database\Factories;
 use App\Enums\AnswerType;
 use App\Enums\AssessmentStatus;
 use App\Enums\CatalogStatus;
+use App\Enums\FindingOrigin;
 use App\Enums\FindingSeverity;
 use App\Enums\FindingStatus;
 use App\Models\AssessmentQuestion;
@@ -26,6 +27,8 @@ class FindingFactory extends Factory
     {
         return [
             'project_id' => IsmsProject::factory(),
+            'origin_type' => FindingOrigin::AssessmentQuestion,
+            'bcm_exercise_result_id' => null,
             'project_assessment_id' => fn (array $attributes): string => $this->assessmentFor($attributes['project_id'])->id,
             'assessment_question_id' => fn (array $attributes): string => $this->questionFor($attributes['project_assessment_id'])->id,
             'title' => fake()->sentence(4),

@@ -4,10 +4,18 @@ use App\Http\Controllers\AssessmentAnswerController;
 use App\Http\Controllers\AssessmentCatalogController;
 use App\Http\Controllers\AssessmentController;
 use App\Http\Controllers\AssetController;
+use App\Http\Controllers\AssetRecoveryController;
 use App\Http\Controllers\AssetRegisterController;
 use App\Http\Controllers\Auth\EntraAuthController;
+use App\Http\Controllers\BcmConflictController;
+use App\Http\Controllers\BcmExerciseController;
+use App\Http\Controllers\BcmExerciseFindingController;
+use App\Http\Controllers\BcmWorkspaceController;
+use App\Http\Controllers\BiaConfigurationController;
+use App\Http\Controllers\BiaController;
 use App\Http\Controllers\BusinessProcessController;
 use App\Http\Controllers\BusinessProcessRegisterController;
+use App\Http\Controllers\ContinuityPlanController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DependencyController;
 use App\Http\Controllers\DependencyRegisterController;
@@ -45,6 +53,41 @@ Route::middleware('guest')->group(function (): void {
 });
 
 Route::middleware(['auth', 'active-user'])->group(function (): void {
+    // BCM returns an explicit fresh-policy 403 for inactive actors.
+    Route::prefix('projects/{project}/bcm')->name('bcm.')->withoutMiddleware('active-user')->group(function (): void {
+        Route::get('/', BcmWorkspaceController::class)->name('index');
+        Route::post('/configuration/initialize', [BiaConfigurationController::class, 'initialize'])->name('configuration.initialize');
+        Route::post('/configuration/activate', [BiaConfigurationController::class, 'activate'])->name('configuration.activate');
+        Route::get('/bia', [BiaController::class, 'index'])->name('bia.index');
+        Route::post('/bia', [BiaController::class, 'store'])->name('bia.store');
+        Route::get('/bia/{revision}', [BiaController::class, 'show'])->name('bia.show');
+        Route::put('/bia/{revision}', [BiaController::class, 'update'])->name('bia.update');
+        Route::post('/bia/{revision}/approve', [BiaController::class, 'approve'])->name('bia.approve');
+        Route::post('/bia/{revision}/revise', [BiaController::class, 'revise'])->name('bia.revise');
+        Route::post('/bia/{revision}/conflicts', [BcmConflictController::class, 'store'])->name('bia.conflicts.store');
+        Route::get('/assets/{asset}/recovery', [AssetRecoveryController::class, 'show'])->name('assets.index');
+        Route::post('/assets/{asset}/recovery', [AssetRecoveryController::class, 'store'])->name('assets.store');
+        Route::get('/assets/{asset}/recovery/{revision}', [AssetRecoveryController::class, 'show'])->name('assets.show');
+        Route::put('/assets/{asset}/recovery/{revision}', [AssetRecoveryController::class, 'update'])->name('assets.update');
+        Route::post('/assets/{asset}/recovery/{revision}/approve', [AssetRecoveryController::class, 'approve'])->name('assets.approve');
+        Route::get('/plans', [ContinuityPlanController::class, 'index'])->name('plans.index');
+        Route::post('/plans', [ContinuityPlanController::class, 'store'])->name('plans.store');
+        Route::get('/plans/{revision}', [ContinuityPlanController::class, 'show'])->name('plans.show');
+        Route::put('/plans/{revision}', [ContinuityPlanController::class, 'update'])->name('plans.update');
+        Route::post('/plans/{revision}/approve', [ContinuityPlanController::class, 'approve'])->name('plans.approve');
+        Route::post('/plans/{revision}/revise', [ContinuityPlanController::class, 'revise'])->name('plans.revise');
+        Route::get('/exercises', [BcmExerciseController::class, 'index'])->name('exercises.index');
+        Route::post('/exercises', [BcmExerciseController::class, 'store'])->name('exercises.store');
+        Route::get('/exercises/{exercise}', [BcmExerciseController::class, 'show'])->name('exercises.show');
+        Route::put('/exercises/{exercise}', [BcmExerciseController::class, 'update'])->name('exercises.update');
+        Route::post('/exercises/{exercise}/plan', [BcmExerciseController::class, 'plan'])->name('exercises.plan');
+        Route::post('/exercises/{exercise}/record', [BcmExerciseController::class, 'record'])->name('exercises.record');
+        Route::post('/exercises/{exercise}/complete', [BcmExerciseController::class, 'complete'])->name('exercises.complete');
+        Route::post('/exercises/{exercise}/cancel', [BcmExerciseController::class, 'cancel'])->name('exercises.cancel');
+        Route::post('/exercises/{exercise}/results/{result}/finding', [BcmExerciseFindingController::class, 'store'])->name('exercises.finding');
+        Route::post('/exercises/{exercise}/results/{result}/waiver', [BcmExerciseFindingController::class, 'waive'])->name('exercises.waiver');
+    });
+
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
     Route::get('/assessment-catalogs', [AssessmentCatalogController::class, 'index'])->name('assessment-catalogs.index');
     Route::get('/assessment-catalogs/template', [AssessmentCatalogController::class, 'template'])->name('assessment-catalogs.template');

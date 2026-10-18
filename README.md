@@ -52,16 +52,24 @@ Inside the application container:
 composer test
 ```
 
-Frontend:
+Frontend (run from the project root with Node 24):
 
 ```bash
-npm run lint:check
-npm run format:check
+npm run check
 npm run types:check
+node tests/Frontend/RiskWorkspaceStateTest.mjs
+node tests/Frontend/BcmBiaStateTest.mjs
+node tests/Frontend/BcmPlanExerciseStateTest.mjs
 npm run build
 ```
 
-The CI workflow runs the same backend and frontend gates, verifies reversible migrations and the starter catalog, and explicitly installs PHP's ZIP extension.
+The CI workflow runs the backend checks and frontend lint, format, type and build checks, verifies reversible migrations and the starter catalog, and explicitly installs PHP's ZIP extension. The three frontend state scripts above run in CI and are also part of the local slice completion gate.
+
+The regular frontend build requires PHP for Wayfinder; when PHP is unavailable locally, use a temporary forwarding command into the application container. Run PostgreSQL test suites sequentially. Migration reset/rollback checks belong on a newly created disposable test database, never the application or production database. BCM's fresh whole-branch review and full verification are tracked in the [Slice 7 verification notes](docs/slice-07-bcm-bia-exercises.md#abschlusspr%C3%BCfung).
+
+## Project workspaces
+
+Project navigation includes process and asset registers, dependencies, protection needs, risks, BIA, continuity plans, exercises, findings and measures. The [protection needs and risk guide](docs/slice-06-protection-needs-risk.md) and [BIA, plan and exercise guide](docs/slice-07-bcm-bia-exercises.md) describe their workflows and operational requirements. BCM is available independently of the project's BCMS flag. Its overview distinguishes missing information, conflicts and current review needs from historical approval/completion.
 
 ## Register CSV imports
 

@@ -28,10 +28,11 @@ class FindingRegisterController extends Controller
         $terminalStatuses = [MeasureStatus::Completed->value, MeasureStatus::Cancelled->value];
 
         $findings = Finding::query()
-            ->select(['id', 'project_id', 'assessment_question_id', 'title', 'description', 'severity', 'status', 'proposed_at'])
+            ->select(['id', 'project_id', 'origin_type', 'bcm_exercise_result_id', 'assessment_question_id', 'title', 'description', 'severity', 'status', 'proposed_at'])
             ->where('project_id', $project->id)
             ->when($status, fn ($query, string $value) => $query->where('status', $value))
             ->with('question:id,question_key,title')
+            ->with('exerciseResult.criterion')
             ->withCount([
                 'measures',
                 'measures as terminal_measures_count' => fn ($query) => $query->whereIn('status', $terminalStatuses),
@@ -46,9 +47,11 @@ class FindingRegisterController extends Controller
                 'severity' => $finding->severity->value,
                 'status' => $finding->status->value,
                 'proposed_at' => $finding->proposed_at->toIso8601String(),
-                'question_id' => $finding->question->id,
-                'question_key' => $finding->question->question_key,
-                'question_title' => $finding->question->title,
+                'origin_type' => $finding->origin_type->value,
+                'origin' => $finding->originReference(),
+                'question_id' => $finding->question?->id,
+                'question_key' => $finding->question?->question_key,
+                'question_title' => $finding->question?->title,
                 'measures' => [
                     'total' => (int) $finding->getAttribute('measures_count'),
                     'terminal' => (int) $finding->getAttribute('terminal_measures_count'),

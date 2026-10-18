@@ -232,7 +232,7 @@ function formatDate(value: string): string {
                 <div class="flex flex-wrap items-start justify-between gap-4">
                     <div>
                         <p class="text-xs text-slate-500">
-                            {{ measure.finding.question_key }} ·
+                            {{ measure.finding.origin.label }} ·
                             {{ measure.finding.title }}
                         </p>
                         <h2 class="mt-2 text-lg font-semibold">
@@ -271,6 +271,7 @@ function formatDate(value: string): string {
                     </div>
                 </dl>
                 <Link
+                    v-if="measure.finding.question_id"
                     :href="`${base}/assessment#question-${measure.finding.question_id}`"
                     class="mt-4 inline-flex rounded-lg border border-slate-700 px-4 py-2 text-sm text-cyan-200 hover:bg-slate-800"
                 >

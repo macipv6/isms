@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\FindingOrigin;
 use App\Enums\FindingSeverity;
 use App\Enums\FindingStatus;
 use Carbon\CarbonImmutable;
@@ -17,7 +18,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property FindingSeverity $severity
  * @property FindingStatus $status
  * @property CarbonImmutable $proposed_at
- * @property-read AssessmentQuestion $question
+ * @property FindingOrigin $origin_type
+ * @property-read AssessmentQuestion|null $question
+ * @property-read BcmExerciseResult|null $exerciseResult
  */
 class Finding extends Model
 {
@@ -26,10 +29,15 @@ class Finding extends Model
 
     use HasUuids;
 
+    // Preserve absolute instants when PostgreSQL and application timezones differ.
+    protected $dateFormat = 'Y-m-d H:i:sP';
+
     protected $fillable = [
         'project_id',
         'project_assessment_id',
         'assessment_question_id',
+        'origin_type',
+        'bcm_exercise_result_id',
         'title',
         'description',
         'severity',
@@ -46,6 +54,7 @@ class Finding extends Model
     protected function casts(): array
     {
         return [
+            'origin_type' => FindingOrigin::class,
             'severity' => FindingSeverity::class,
             'status' => FindingStatus::class,
             'proposed_at' => 'immutable_datetime',
@@ -84,6 +93,28 @@ class Finding extends Model
     public function question(): BelongsTo
     {
         return $this->belongsTo(AssessmentQuestion::class, 'assessment_question_id');
+    }
+
+    /** @return BelongsTo<BcmExerciseResult, $this> */
+    public function exerciseResult(): BelongsTo
+    {
+        return $this->belongsTo(BcmExerciseResult::class, 'bcm_exercise_result_id');
+    }
+
+    /** @return array{type: string, id: string, label: string} */
+    public function originReference(): array
+    {
+        if ($this->origin_type === FindingOrigin::BcmExerciseResult) {
+            $result = $this->exerciseResult;
+            assert($result instanceof BcmExerciseResult);
+
+            return ['type' => $this->origin_type->value, 'id' => $result->id, 'label' => 'BCM-Übung: '.$result->criterion->expected_result];
+        }
+
+        $question = $this->question;
+        assert($question instanceof AssessmentQuestion);
+
+        return ['type' => $this->origin_type->value, 'id' => $question->id, 'label' => $question->question_key.' · '.$question->title];
     }
 
     /**

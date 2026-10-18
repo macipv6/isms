@@ -48,8 +48,9 @@ class MeasureRegisterController extends Controller
             ->when($priority, fn ($query, string $value) => $query->where('priority', $value))
             ->when($dueFrom, fn ($query, string $value) => $query->whereDate('due_date', '>=', $value))
             ->when($dueTo, fn ($query, string $value) => $query->whereDate('due_date', '<=', $value))
-            ->with('finding:id,project_id,assessment_question_id,title,status')
+            ->with('finding:id,project_id,origin_type,bcm_exercise_result_id,assessment_question_id,title,status')
             ->with('finding.question:id,question_key,title')
+            ->with('finding.exerciseResult.criterion')
             ->orderByRaw('due_date is null')
             ->orderBy('due_date')
             ->orderByRaw("case priority when 'critical' then 1 when 'high' then 2 when 'medium' then 3 else 4 end")
@@ -67,9 +68,11 @@ class MeasureRegisterController extends Controller
                     'id' => $measure->finding->id,
                     'title' => $measure->finding->title,
                     'status' => $measure->finding->status->value,
-                    'question_id' => $measure->finding->question->id,
-                    'question_key' => $measure->finding->question->question_key,
-                    'question_title' => $measure->finding->question->title,
+                    'origin_type' => $measure->finding->origin_type->value,
+                    'origin' => $measure->finding->originReference(),
+                    'question_id' => $measure->finding->question?->id,
+                    'question_key' => $measure->finding->question?->question_key,
+                    'question_title' => $measure->finding->question?->title,
                 ],
             ]);
 

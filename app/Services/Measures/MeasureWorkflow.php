@@ -162,14 +162,14 @@ class MeasureWorkflow
 
     private function lockedWritableProject(IsmsProject $project, User $actor): IsmsProject
     {
-        $actor->loadMissing('organization');
-        if (! $actor->is_active
-            || $actor->organization?->organization_type !== 'internal'
-            || ! in_array($actor->role, [UserRole::Admin, UserRole::Consultant], true)) {
+        $locked = IsmsProject::query()->with('organization')->whereKey($project->id)->lockForUpdate()->first();
+        $current = User::query()->with('organization')->whereKey($actor->id)->lockForUpdate()->first();
+        if (! $current?->is_active
+            || ! $current->organization?->is_active
+            || $current->organization->organization_type !== 'internal'
+            || ! in_array($current->role, [UserRole::Admin, UserRole::Consultant], true)) {
             $this->reject('measure', 'Die Aktion ist nicht zulässig.');
         }
-
-        $locked = IsmsProject::query()->with('organization')->whereKey($project->id)->lockForUpdate()->first();
         if (! $locked instanceof IsmsProject
             || $locked->organization?->organization_type !== 'customer'
             || ! $locked->organization->is_active

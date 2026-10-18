@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
 import type { ProjectWorkTab } from '@/types/work-items';
+import { bcmBase } from '@/types/bcm';
 
 const props = defineProps<{
     organizationId: string;
@@ -26,6 +27,18 @@ const tabs: Array<{ key: ProjectWorkTab; label: string; href: string }> = [
         key: 'protection-needs',
         label: 'Schutzbedarf',
         href: `${base}/protection-needs`,
+    },
+    { key: 'bcm', label: 'BCM-Übersicht', href: bcmBase(props.projectId) },
+    { key: 'bia', label: 'BIA', href: `${bcmBase(props.projectId)}/bia` },
+    {
+        key: 'plans',
+        label: 'Notfallpläne',
+        href: `${bcmBase(props.projectId)}/plans`,
+    },
+    {
+        key: 'exercises',
+        label: 'Übungen',
+        href: `${bcmBase(props.projectId)}/exercises`,
     },
 ];
 </script>

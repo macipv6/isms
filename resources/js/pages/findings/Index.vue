@@ -115,8 +115,7 @@ function formatDate(value: string): string {
                 <div class="flex flex-wrap items-start justify-between gap-4">
                     <div>
                         <p class="text-xs text-slate-500">
-                            {{ finding.question_key }} ·
-                            {{ finding.question_title }}
+                            {{ finding.origin.label }}
                         </p>
                         <h2 class="mt-2 text-lg font-semibold">
                             {{ finding.title }}
@@ -147,6 +146,7 @@ function formatDate(value: string): string {
                         abgeschlossen
                     </p>
                     <Link
+                        v-if="finding.question_id"
                         :href="`${base}/assessment#question-${finding.question_id}`"
                         class="rounded-lg border border-slate-700 px-4 py-2 text-cyan-200 hover:bg-slate-800"
                     >
@@ -167,8 +167,8 @@ function formatDate(value: string): string {
                 Keine Feststellungen für diesen Filter vorhanden.
             </p>
             <p class="mt-2 text-sm text-slate-400">
-                Feststellungen werden aus einer teilweise oder nicht erfüllten
-                Frage vorgeschlagen.
+                Feststellungen können aus Bewertungsfragen oder
+                Übungsergebnissen vorgeschlagen werden.
             </p>
         </div>
     </AppLayout>
