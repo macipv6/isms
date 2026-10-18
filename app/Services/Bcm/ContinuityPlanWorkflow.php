@@ -45,7 +45,7 @@ class ContinuityPlanWorkflow
             }
             $existing = ContinuityPlanRevision::query()->where('continuity_plan_id', $revision->continuity_plan_id)->where('project_id', $project->id)->where('status', 'draft')->lockForUpdate()->first();
             if ($existing) {
-                $this->validator->validateReferences($existing);
+                $this->validator->validateReferences($existing, requireActiveProcesses: false);
 
                 return $existing;
             }
@@ -60,7 +60,7 @@ class ContinuityPlanWorkflow
                     $copy->save();
                 }
             }
-            $this->validator->validateReferences($draft);
+            $this->validator->validateReferences($draft, requireActiveProcesses: false);
             $this->record('revised', $draft, $project, $actor, []);
 
             return $draft;

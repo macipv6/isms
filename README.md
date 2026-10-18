@@ -63,7 +63,7 @@ node tests/Frontend/BcmPlanExerciseStateTest.mjs
 npm run build
 ```
 
-The CI workflow runs the backend checks and frontend lint, format, type and build checks, verifies reversible migrations and the starter catalog, and explicitly installs PHP's ZIP extension. The three frontend state scripts above are also part of the local slice completion gate.
+The CI workflow runs the backend checks and frontend lint, format, type and build checks, verifies reversible migrations and the starter catalog, and explicitly installs PHP's ZIP extension. The three frontend state scripts above run in CI and are also part of the local slice completion gate.
 
 The regular frontend build requires PHP for Wayfinder; when PHP is unavailable locally, use a temporary forwarding command into the application container. Run PostgreSQL test suites sequentially. Migration reset/rollback checks belong on a newly created disposable test database, never the application or production database. BCM's fresh whole-branch review and full verification are tracked in the [Slice 7 verification notes](docs/slice-07-bcm-bia-exercises.md#abschlusspr%C3%BCfung).
 

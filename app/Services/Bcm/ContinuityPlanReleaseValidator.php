@@ -72,11 +72,11 @@ class ContinuityPlanReleaseValidator
     }
 
     /** Check all stored references afresh, including omitted partial-save fields. */
-    public function validateReferences(ContinuityPlanRevision $revision): void
+    public function validateReferences(ContinuityPlanRevision $revision, bool $requireActiveProcesses = true): void
     {
         foreach ($revision->processes()->orderBy('business_process_id')->get() as $link) {
             $process = BusinessProcess::query()->whereKey($link->business_process_id)->where('project_id', $revision->project_id)->lockForUpdate()->firstOrFail();
-            if (! $process->is_active) {
+            if ($requireActiveProcesses && ! $process->is_active) {
                 throw ValidationException::withMessages(['process_ids' => 'Verknüpfte Prozesse müssen aktiv sein.']);
             }
         }

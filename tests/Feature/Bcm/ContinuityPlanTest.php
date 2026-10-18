@@ -58,6 +58,30 @@ class ContinuityPlanTest extends TestCase
         $this->assertStringNotContainsString('Leader Secret', json_encode($audit));
     }
 
+    public function test_successor_can_replace_a_deactivated_historical_process(): void
+    {
+        [$project, $actor] = $this->bcmProject();
+        $oldProcess = $this->planProcess($project, $actor);
+        $replacement = $this->planProcess($project, $actor);
+        $workflow = app(ContinuityPlanWorkflow::class);
+        $released = $workflow->approve($workflow->create($project, $this->planData($oldProcess), $actor), 1, $actor);
+        $oldProcess->update(['is_active' => false]);
+
+        $draft = $workflow->revise($released, $actor);
+        $this->assertSame($draft->id, $workflow->revise($released, $actor)->id);
+        try {
+            $workflow->approve($draft, 1, $actor);
+            $this->fail('Inactive historical process must still block approval.');
+        } catch (ValidationException) {
+            $this->assertSame('draft', $draft->fresh()->status->value);
+        }
+        $draft = $workflow->save($draft, ['process_ids' => [$replacement->id]], 1, $actor);
+        $approved = $workflow->approve($draft, $draft->lock_version, $actor);
+        $this->assertSame('approved', $approved->status->value);
+        $this->assertSame($replacement->id, $approved->processes()->sole()->business_process_id);
+        $this->assertSame($oldProcess->id, $released->processes()->sole()->business_process_id);
+    }
+
     #[DataProvider('missingFields')]
     public function test_missing_release_data_is_rejected(string $field, mixed $value): void
     {

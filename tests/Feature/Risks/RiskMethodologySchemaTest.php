@@ -200,6 +200,10 @@ class RiskMethodologySchemaTest extends TestCase
         $triggerMigration = require database_path('migrations/2026_09_22_063000_create_risk_trigger_and_threat_review_tables.php');
         $dependentMigration = require database_path('migrations/2026_09_22_061000_create_threat_catalog_and_risk_context_tables.php');
         $migration = require database_path('migrations/2026_09_22_060000_create_risk_methodology_tables.php');
+        $bcmMigrations = array_map(fn ($path) => require $path, glob(database_path('migrations/2026_10_11_070*.php')));
+        foreach (array_reverse($bcmMigrations) as $bcmMigration) {
+            $bcmMigration->down();
+        }
         $treatmentMigration->down();
         $analysisMigration->down();
         $triggerMigration->down();
@@ -212,6 +216,9 @@ class RiskMethodologySchemaTest extends TestCase
         $triggerMigration->up();
         $analysisMigration->up();
         $treatmentMigration->up();
+        foreach ($bcmMigrations as $bcmMigration) {
+            $bcmMigration->up();
+        }
         $this->assertTrue(Schema::hasTable('risk_methodology_versions'));
         $this->assertTrue(Schema::hasTable('risk_matrix_cells'));
     }

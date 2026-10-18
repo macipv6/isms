@@ -67,7 +67,7 @@ Nicht weiter qualifizierte PHP-Testdateien in der Tabelle liegen unter `tests/Fe
 | 11: Durchgängiger HTTP-Ablauf Konfiguration → BIA → Assetkonflikt → Akzeptanz/Freigaben → fehlgeschlagene Übung → Finding → Akzeptanz → zwei Maßnahmen → Abschluss; Nachweisentzug/Zielnachfolger/Deaktivierung ändern Bereitschaft ohne Historywrites | `tests/Feature/Bcm/BcmEndToEndTest.php::test_http_recovery_lifecycle_keeps_decisions_private_and_completed_history_when_sources_change` |
 | 11: Absolute Freigabe-/Entscheidungs-/Auditzeitpunkte und Sommer-/Winterzeit mit UTC-Termin/Offset-Isttermin, Bestätigung/Verzicht/Absage/Abschluss | `BcmEndToEndTest.php::{test_http_recovery_lifecycle_keeps_decisions_private_and_completed_history_when_sources_change,test_exercise_datetime_inputs_and_action_metadata_preserve_absolute_instants_across_dst}` |
 
-Die fünf Review-Schwerpunkte des Plans sind durch die Pfad-, Fingerprint-, Frische-, Herkunfts- und Vue-409-Fälle oben zugeordnet. Noch offen sind der frische gemeinsame Branch-Review und der vollständige Abschlussgate einschließlich Migrationen und Produktionsbuild; die Phase-1-Prüfungen ersetzen diese nicht.
+Die fünf Review-Schwerpunkte des Plans sind durch die Pfad-, Fingerprint-, Frische-, Herkunfts- und Vue-409-Fälle oben zugeordnet. Der gemeinsame Branch-Review und der lokale Abschlussgate einschließlich Migrationen und Produktionsbuild wurden durchgeführt. Befunde, Korrekturen und die verbleibende kleine Einschränkung sind im [Prüfprotokoll](verification-2026-10-16.md) festgehalten.
 
 ## Abschlussprüfung
 

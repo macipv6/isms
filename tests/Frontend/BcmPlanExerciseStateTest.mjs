@@ -427,6 +427,78 @@ draft.state.refreshed();
 draftProps.capabilities.edit = false;
 draft.save();
 assert.equal(draftSaves, 1);
+// A browser displays local wall time but must send an absolute instant.
+const priorTimezone = process.env.TZ;
+try {
+    for (const [zone, original, local, edited, expected] of [
+        [
+            'Europe/Berlin',
+            '2026-07-16T08:00:37.000Z',
+            '2026-07-16T10:00',
+            '2026-07-16T11:00',
+            '2026-07-16T09:00:00.000Z',
+        ],
+        [
+            'Europe/Berlin',
+            '2026-12-16T09:00:37.000Z',
+            '2026-12-16T10:00',
+            '2026-12-16T11:00',
+            '2026-12-16T10:00:00.000Z',
+        ],
+        [
+            'America/New_York',
+            '2026-07-16T08:00:37.000Z',
+            '2026-07-16T04:00',
+            '2026-07-16T05:00',
+            '2026-07-16T09:00:00.000Z',
+        ],
+        [
+            'Europe/Berlin',
+            '2026-10-25T01:30:37.000Z',
+            '2026-10-25T02:30',
+            '2026-10-25T03:30',
+            '2026-10-25T02:30:00.000Z',
+        ],
+    ]) {
+        process.env.TZ = zone;
+        const scheduled = setup('components/bcm/BcmExerciseForm.vue', {
+            ...draftProps,
+            capabilities: { write: true, edit: true, plan: true },
+            exercise: { ...draftProps.exercise, planned_at: original },
+        });
+        const recorded = setup('components/bcm/BcmExerciseResults.vue', {
+            ...exerciseProps,
+            capabilities: { write: true, record: true },
+            exercise: { ...exercise, actual_at: original },
+        });
+        for (const [state, field] of [
+            [scheduled, 'planned_at'],
+            [recorded, 'actual_at'],
+        ]) {
+            assert.equal(
+                state.form[field],
+                local,
+                `${zone}: display browser-local time`,
+            );
+            assert.equal(
+                state.payload()[field],
+                original,
+                'Unchanged date preserves seconds and DST-fold instant',
+            );
+            state.form[field] = edited;
+            assert.equal(
+                state.payload()[field],
+                expected,
+                'Edited date submits explicit UTC',
+            );
+            state.form[field] = '';
+            assert.equal(state.payload()[field], null);
+        }
+    }
+} finally {
+    if (priorTimezone === undefined) delete process.env.TZ;
+    else process.env.TZ = priorTimezone;
+}
 const sources = setup('components/bcm/BcmSourceHistory.vue', {
     base: '/bcm',
     sources: page,

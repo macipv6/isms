@@ -22,6 +22,11 @@ class BcmExercise extends Model
 
     protected $fillable = ['project_id', 'continuity_plan_revision_id', 'status', 'lock_version', 'scenario', 'exercise_type', 'planned_at', 'leader_name', 'participants', 'actual_at', 'source_snapshot', 'created_by', 'completed_by', 'completed_at', 'cancelled_by', 'cancelled_at', 'cancelled_reason', 'source_change_acknowledged_by', 'source_change_acknowledged_at', 'source_change_reason'];
 
+    public function fromDateTime($value): ?string
+    {
+        return empty($value) ? $value : $this->asDateTime($value)->utc()->format($this->getDateFormat());
+    }
+
     protected function casts(): array
     {
         return ['status' => BcmExerciseStatus::class, 'lock_version' => 'integer', 'source_snapshot' => 'array', 'planned_at' => 'immutable_datetime', 'actual_at' => 'immutable_datetime', 'completed_at' => 'immutable_datetime', 'cancelled_at' => 'immutable_datetime', 'source_change_acknowledged_at' => 'immutable_datetime', 'created_at' => 'immutable_datetime', 'updated_at' => 'immutable_datetime'];

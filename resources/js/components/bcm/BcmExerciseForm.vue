@@ -2,6 +2,7 @@
 import { Link, router, useForm } from '@inertiajs/vue3';
 import { computed, watch } from 'vue';
 import FormErrorList from '@/components/FormErrorList.vue';
+import { absoluteDateTime, localDateTime } from './dateTime';
 import BcmEvidencePicker from './BcmEvidencePicker.vue';
 import { nullableInteger, useBcmFormState } from './biaState';
 import type {
@@ -29,7 +30,7 @@ const form = editable.value
           plan_revision_id: props.exercise?.plan_revision_id ?? '',
           scenario: props.exercise?.scenario ?? '',
           exercise_type: props.exercise?.exercise_type ?? 'tabletop',
-          planned_at: props.exercise?.planned_at?.slice(0, 16) ?? '',
+          planned_at: localDateTime(props.exercise?.planned_at),
           leader_name: props.exercise?.leader_name ?? '',
           participants: props.exercise?.participants ?? '',
           criteria:
@@ -62,7 +63,10 @@ function payload() {
         ...(!props.exercise ? { plan_revision_id: form.plan_revision_id } : {}),
         scenario: form.scenario,
         exercise_type: form.exercise_type,
-        planned_at: form.planned_at || null,
+        planned_at: absoluteDateTime(
+            form.planned_at,
+            props.exercise?.planned_at,
+        ),
         leader_name: form.leader_name,
         participants: form.participants,
         criteria: form.criteria.map((row) => ({
@@ -195,7 +199,8 @@ function reload(): void {
             ><label
                 >Geplanter Termin<input
                     v-model="form.planned_at"
-                    type="datetime-local" /></label
+                    type="datetime-local"
+                    title="Ortszeit dieses Browsers" /></label
             ><label
                 >Übungsleitung<input
                     v-model="form.leader_name"

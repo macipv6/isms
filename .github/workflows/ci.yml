@@ -85,6 +85,12 @@ jobs:
       - name: Frontend type check
         run: npm run types:check
 
+      - name: Frontend workflow state checks
+        run: |
+          node tests/Frontend/RiskWorkspaceStateTest.mjs
+          node tests/Frontend/BcmBiaStateTest.mjs
+          node tests/Frontend/BcmPlanExerciseStateTest.mjs
+
       - name: Frontend production build
         run: npm run build
 

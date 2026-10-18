@@ -2,6 +2,7 @@
 import { Link, router, useForm } from '@inertiajs/vue3';
 import { computed, reactive, watch } from 'vue';
 import FormErrorList from '@/components/FormErrorList.vue';
+import { absoluteDateTime, localDateTime } from './dateTime';
 import BcmEvidencePicker from './BcmEvidencePicker.vue';
 import BcmFindingActions from './BcmFindingActions.vue';
 import { nullableInteger, useBcmFormState } from './biaState';
@@ -53,7 +54,7 @@ function rowData(row: ExerciseResult | ExerciseCriterion) {
 const form = mutable.value
     ? useForm({
           lock_version: props.exercise.lock_version,
-          actual_at: props.exercise.actual_at?.slice(0, 16) ?? '',
+          actual_at: localDateTime(props.exercise.actual_at),
           source_change_reason: '',
           acknowledge: false,
           evidence_ids: [...props.exercise.evidence_ids],
@@ -138,7 +139,7 @@ function payload() {
     if (!form) return {};
     return {
         lock_version: form.lock_version,
-        actual_at: form.actual_at || null,
+        actual_at: absoluteDateTime(form.actual_at, props.exercise.actual_at),
         evidence_ids: [...form.evidence_ids],
         ...(form.acknowledge
             ? { source_change_reason: form.source_change_reason }
@@ -265,6 +266,7 @@ const visibleRows = computed(
                 >Tatsächlicher Termin<input
                     v-model="form.actual_at"
                     type="datetime-local"
+                    title="Ortszeit dieses Browsers"
             /></label>
             <div
                 v-if="!exercise.freshness.current"
